@@ -2632,6 +2632,192 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
     
     return fig
 
+
+
+# ========================================================
+# NEW: 3D NEURAL TOPOGRAPHY (SCI-FI VISUALIZATION)
+# ========================================================
+def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
+    """
+    Sci-Fi 3D Visualization of the GRN.
+    - Uses 3D Force-Directed Layout
+    - 'Neon' edges with dynamic transparency
+    - 'Neural Halo' glow effects
+    """
+    # 1. Build the Graph Structure (Same logic as 2D)
+    G = nx.DiGraph()
+    
+    # Add Components (Nodes)
+    for comp in genotype.component_genes.values():
+        G.add_node(
+            comp.name,
+            size=max(5, comp.mass * 8.0),
+            color=comp.color,
+            node_type="Component",
+            desc=f"Mass: {comp.mass:.2f}"
+        )
+
+    # Add Rules (Edges) & Abstract Nodes
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        # Resolve Target
+        target_id = rule.action_param
+        if target_id in genotype.component_genes:
+            target_name = genotype.component_genes[target_id].name
+        else:
+            target_name = str(target_id)
+            if target_name not in G:
+                G.add_node(target_name, size=3, color='#888888', node_type="Abstract", desc="Abstract Target")
+
+        # Resolve Source
+        source_name = "Always"
+        if rule.conditions:
+            source_name = rule.conditions[0]['source']
+        
+        if source_name not in G:
+            G.add_node(source_name, size=3, color='#00FFFF', node_type="Sensor", desc="Sensor Input")
+
+        # Add Edge
+        edge_type = 'excitatory' if 'GROW' in rule.action_type else ('inhibitory' if 'DIE' in rule.action_type else 'modulatory')
+        G.add_edge(source_name, target_name, weight=rule.probability, type=edge_type)
+
+    # 2. Generate 3D Positions
+    # Use spring layout in 3D space
+    try:
+        pos = nx.spring_layout(G, dim=3, seed=42, k=1.5/np.sqrt(len(G.nodes()) or 1))
+    except:
+        return go.Figure() # Fail safe
+
+    # --- 3. RENDER EDGES (The Neural Web) ---
+    edge_traces = []
+    
+    for u, v, data in G.edges(data=True):
+        if u not in pos or v not in pos: continue
+        x0, y0, z0 = pos[u]
+        x1, y1, z1 = pos[v]
+        
+        # Dynamic Opacity based on weight
+        weight = data.get('weight', 0.5)
+        alpha = max(0.1, weight * 0.6)
+        
+        # Neon Palette
+        conn_type = data.get('type', 'modulatory')
+        if conn_type == 'excitatory':
+            edge_color = f'rgba(0, 255, 200, {alpha})' # Cyan
+        elif conn_type == 'inhibitory':
+            edge_color = f'rgba(255, 0, 100, {alpha})' # Hot Pink
+        else:
+            edge_color = f'rgba(100, 100, 255, {alpha})' # Electric Blue
+
+        edge_traces.append(go.Scatter3d(
+            x=[x0, x1, None], y=[y0, y1, None], z=[z0, z1, None],
+            mode='lines',
+            line=dict(width=2 * weight, color=edge_color),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- 4. RENDER NODES ---
+    node_x, node_y, node_z = [], [], []
+    node_colors = []
+    node_sizes = []
+    node_symbols = []
+    node_texts = []
+    node_labels = [] 
+    
+    # Halo Data
+    halo_sizes = []
+    halo_colors = []
+
+    for node, data in G.nodes(data=True):
+        x, y, z = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_z.append(z)
+        
+        color = data.get('color', '#FFFFFF')
+        size = data.get('size', 5)
+        n_type = data.get('node_type', 'Unknown')
+        
+        node_colors.append(color)
+        node_sizes.append(size)
+        
+        # Halos are larger and transparent
+        halo_sizes.append(size * 2.5)
+        halo_colors.append(color)
+        
+        node_texts.append(f"<b>{node}</b><br>{n_type}<br>{data.get('desc','')}")
+
+        # Shape Coding
+        if n_type == 'Sensor': 
+            node_symbols.append('diamond')
+            node_labels.append(f"👁️ {node}")
+        elif n_type == 'Abstract':
+            node_symbols.append('square')
+            node_labels.append(f"⚡ {node}")
+        else:
+            node_symbols.append('circle')
+            # Only label big components to reduce clutter
+            if size > 8:
+                node_labels.append(node)
+            else:
+                node_labels.append("")
+
+    # Trace: Neural Halo (Glow)
+    halo_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers',
+        marker=dict(
+            size=halo_sizes,
+            color=halo_colors,
+            opacity=0.15,
+            symbol=node_symbols
+        ),
+        hoverinfo='none',
+        showlegend=False
+    )
+
+    # Trace: Core Nodes
+    node_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers+text',
+        text=node_labels,
+        textposition="top center",
+        textfont=dict(color="white", size=10),
+        hovertext=node_texts,
+        hoverinfo='text',
+        marker=dict(
+            size=node_sizes,
+            color=node_colors,
+            symbol=node_symbols,
+            line=dict(width=2, color='rgba(255,255,255,0.8)'),
+            opacity=1.0
+        )
+    )
+
+    # --- 5. LAYOUT (The Void) ---
+    fig = go.Figure(data=edge_traces + [halo_trace, node_trace])
+    fig.update_layout(
+        title=dict(
+            text=f"<b>Holographic Neural Map</b> | Nodes: {len(G.nodes())}",
+            font=dict(size=14, color="rgba(200,200,200,0.8)"),
+            x=0.5, y=0.95
+        ),
+        showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)', # Transparent for Streamlit dark mode
+        scene=dict(
+            xaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            yaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            zaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            bgcolor='rgba(0,0,0,0)'
+        ),
+        height=600,
+        margin=dict(l=0, r=0, t=40, b=0)
+    )
+    
+    return fig
+
 # --- PASTE THIS NEW CODE BLOCK HERE ---
 
 def visualize_phenotype_mri(phenotype: Phenotype, grid: UniverseGrid) -> go.Figure:
@@ -5508,6 +5694,13 @@ def main():
                                 st.markdown("**🧠 Neural Topography (Interactive 2D)**")
                                 fig_topo = visualize_grn_2d_interactive(specimen)
                                 st.plotly_chart(fig_topo, width='stretch', key=f"grn_topo_{i}")
+
+                                st.markdown("---")
+                                # 5. NEW: 3D Holographic View
+                                st.markdown("**🧊 Holographic Neural Map (3D)**")
+                                st.caption("Rotate, zoom, and explore the organism's brain structure in 3D space.")
+                                fig_3d = visualize_grn_3d_interactive(specimen)
+                                st.plotly_chart(fig_3d, width='stretch', key=f"grn_3d_{i}")
                                 
                                 # 4. Objectives
                                 if specimen.objective_weights:
