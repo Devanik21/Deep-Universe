@@ -2420,10 +2420,217 @@ def apply_physics_drift(settings: Dict):
 # ========================================================
 
 # ========================================================
+
+
 #
 # PART 6: VISUALIZATION (THE "VIEWSCREEN")
 #
 # ========================================================
+
+# ========================================================
+# ADD THIS HELPER FUNCTION (For the Curved Lines)
+# ========================================================
+
+
+
+def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
+    """
+    Generates x, y coordinates for a quadratic Bezier curve.
+    """
+    # Midpoint with offset for curvature
+    mx = (x0 + x1) / 2
+    my = (y0 + y1) / 2
+    
+    # Perpendicular vector
+    dx = x1 - x0
+    dy = y1 - y0
+    dist = np.sqrt(dx*dx + dy*dy)
+    
+    if dist == 0:
+        return [x0], [y0]
+
+    # Offset midpoint perpendicularly
+    ox = -dy * curvature
+    oy = dx * curvature
+    
+    ctrl_x = mx + ox
+    ctrl_y = my + oy
+    
+    t = np.linspace(0, 1, points)
+    bx = (1-t)**2 * x0 + 2*(1-t)*t * ctrl_x + t**2 * x1
+    by = (1-t)**2 * y0 + 2*(1-t)*t * ctrl_y + t**2 * y1
+    
+    return bx, by
+
+
+
+
+
+# ========================================================
+# NEW: ADAPTIVE 2D GRN VISUALIZATION (THE "REFERENCE" STYLE)
+# ========================================================
+def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
+    """
+    Adaptive 2D visualization for Universe Sandbox 2.0.
+    Maps Components (Nodes) and Rules (Edges) with Deep Space aesthetics.
+    """
+    G = nx.DiGraph()
+    
+    # 1. Add Component Nodes (The "Body Parts")
+    for comp_id, comp in genotype.component_genes.items():
+        G.add_node(
+            comp.name,
+            size=comp.mass * 10.0, # Mass determines visual size
+            color=comp.color,
+            node_type="Component",
+            hover_text=(
+                f"<b>{comp.name}</b><br>"
+                f"Kingdom: {comp.base_kingdom}<br>"
+                f"Mass: {comp.mass:.2f}<br>"
+                f"Role: {'Structure' if comp.structural > 0 else 'Metabolism'}"
+            )
+        )
+
+    # 2. Add Rules as Edges
+    # We map the flow from Trigger (Condition) -> Actuator (Action Target)
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        target_id = rule.action_param
+        target_name = "Unknown"
+        
+        # Resolve Target Name
+        if target_id in genotype.component_genes:
+            target_name = genotype.component_genes[target_id].name
+        else:
+            # It's an abstract target (e.g. NEIGHBORS, timer_A)
+            target_name = str(target_id)
+            if target_name not in G:
+                G.add_node(target_name, size=5, color="#888888", node_type="Abstract", hover_text=f"Abstract Target: {target_name}")
+
+        # Resolve Source (Condition)
+        # Rules can have multiple conditions; we pick the primary sensor
+        source_name = "Always"
+        if rule.conditions:
+            source_raw = rule.conditions[0]['source']
+            # If the source is 'self_type' check, use that component as source
+            if source_raw == 'self_type':
+                type_hash = rule.conditions[0]['target_value']
+                # Try to find component with this name/hash (Simplified)
+                source_name = "Self Concept" 
+            else:
+                source_name = source_raw
+
+        # Ensure Source Node exists (Sensors)
+        if source_name not in G:
+            G.add_node(source_name, size=5, color="#00FFFF", node_type="Sensor", hover_text=f"Sensor: {source_name}")
+
+        # Add Edge
+        edge_color = '#00FF00' if 'GROW' in rule.action_type else '#FF0000' # Green for grow, Red for other
+        G.add_edge(source_name, target_name, weight=rule.probability, type=rule.action_type, color=edge_color)
+
+    # --- ADAPTIVE SCALING LOGIC (From Reference) ---
+    node_count = len(G.nodes())
+    if node_count > 50:
+        pos = nx.spring_layout(G, seed=layout_seed, k=3.0/np.sqrt(node_count), iterations=200)
+    else:
+        try:
+            pos = nx.kamada_kawai_layout(G)
+        except:
+            pos = nx.spring_layout(G, seed=layout_seed, k=0.8)
+
+    fig = go.Figure()
+
+    # --- 1. Draw Curved Edges ---
+    base_width = 0.5 if node_count > 100 else 1.5
+    opacity = 0.4 if node_count > 100 else 0.8
+
+    for i, (u, v, data) in enumerate(G.edges(data=True)):
+        if u not in pos or v not in pos: continue
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        
+        curve_intensity = 0.05 if node_count > 50 else 0.15
+        curvature = curve_intensity if i % 2 == 0 else -curve_intensity
+        
+        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
+        
+        # Color based on action type
+        act_type = data.get('type', 'IDLE')
+        e_color = 'rgba(100, 255, 100, 0.6)' if 'GROW' in act_type else 'rgba(255, 100, 100, 0.6)'
+        if 'EMIT' in act_type: e_color = 'rgba(100, 200, 255, 0.6)'
+
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode='lines',
+            line=dict(width=base_width, color=e_color),
+            hoverinfo='text',
+            text=f"Action: {act_type}",
+            showlegend=False
+        ))
+
+    # --- 2. Draw Nodes (Adaptive) ---
+    node_x, node_y = [], []
+    node_colors = []
+    node_sizes = []
+    node_labels = [] 
+    hover_texts = [] 
+    
+    # Base size multiplier
+    if node_count < 20: base_size_mult = 1.0
+    elif node_count < 100: base_size_mult = 0.8
+    else: base_size_mult = 0.5
+
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_colors.append(G.nodes[node]['color'])
+        hover_texts.append(G.nodes[node]['hover_text'])
+        
+        # Size logic
+        raw_size = G.nodes[node]['size']
+        final_size = max(8, raw_size * 2.0 * base_size_mult) # Ensure visible
+        node_sizes.append(final_size)
+        
+        # Smart Labeling: Hide labels for sensors if crowded
+        if node_count > 40 and G.nodes[node]['node_type'] == 'Sensor':
+            node_labels.append("")
+        else:
+            node_labels.append(node)
+
+    # Add Nodes Trace
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text', 
+        text=node_labels,
+        textposition="bottom center",
+        textfont=dict(family="Arial", size=10 if node_count < 50 else 8, color="#EEE"),
+        hovertext=hover_texts,
+        hoverinfo='text',
+        marker=dict(
+            color=node_colors,
+            size=node_sizes,
+            line=dict(width=1 if node_count > 100 else 2, color='white'),
+            opacity=1.0
+        ),
+        name='Genetic Components'
+    ))
+
+    # Layout Styling (Deep Space)
+    fig.update_layout(
+        title=dict(text=f"<b>Neural Topography</b> | Nodes: {node_count}", x=0.5, font=dict(size=14, color='#AAA')),
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=10, l=10, r=10, t=40),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=650,
+        plot_bgcolor='rgba(5,5,8,1)', # Deep space black
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
 
 # --- PASTE THIS NEW CODE BLOCK HERE ---
 
@@ -5296,6 +5503,11 @@ def main():
                                 st.markdown("**Logic Circuit (Sensors → Acts)**")
                                 fig_circuit = visualize_grn_sankey(specimen)
                                 st.plotly_chart(fig_circuit, width='stretch', key=f"grn_circuit_{i}")
+
+                                # 4. NEW: Interactive Neural Topography
+                                st.markdown("**🧠 Neural Topography (Interactive 2D)**")
+                                fig_topo = visualize_grn_2d_interactive(specimen)
+                                st.plotly_chart(fig_topo, width='stretch', key=f"grn_topo_{i}")
                                 
                                 # 4. Objectives
                                 if specimen.objective_weights:
