@@ -6043,29 +6043,66 @@ def main():
 
                                 # --- 2. THE NEON RENDERER ---
                                 # --- 2. THE NEON RENDERER ---
+                                # --- 2. THE NEON RENDERER (UPGRADED: PRECISION MODE) ---
                                 def plot_neon(graph, pos, ax, title):
-                                    # Dark Void Background
+                                    # 1. Background: Deep Space Void (Very dark grey/black)
                                     ax.set_facecolor('#050505')
                                     
-                                    # FIX: Use Hex color '#00FFFF' (Cyan) + alpha parameter
-                                    # Matplotlib crashes on 'rgba(...)' strings!
-                                    nx.draw_networkx_edges(graph, pos, ax=ax, edge_color='#00FFFF', width=0.5, alpha=0.1, arrows=False)
+                                    # 2. Edges: "Fiber Optic" Style
+                                    # Thinner width (0.3), specific Cyan color, low alpha for "ghostly" connections
+                                    nx.draw_networkx_edges(
+                                        graph, pos, ax=ax, 
+                                        edge_color='#00FFFF', 
+                                        width=0.3, 
+                                        alpha=0.15, 
+                                        arrows=False
+                                    )
                                     
-                                    # Draw Nodes (Glowing Dots)
-                                    sizes = [G.nodes[n].get('size', 5)*2 for n in graph.nodes()]
+                                    # Get data lists
+                                    base_sizes = [G.nodes[n].get('size', 5) for n in graph.nodes()]
                                     colors = [G.nodes[n].get('color', '#FFF') for n in graph.nodes()]
-                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=sizes, node_color=colors, alpha=0.9, linewidths=0)
                                     
-                                    # SMART LABELING: Only label HUBS (Top 10% by connections)
+                                    # 3. Nodes Layer A: The "Halo" (Atmosphere)
+                                    # Large, very transparent (alpha=0.1), creates the glow effect
+                                    nx.draw_networkx_nodes(
+                                        graph, pos, ax=ax, 
+                                        node_size=[s * 8.0 for s in base_sizes], 
+                                        node_color=colors, 
+                                        alpha=0.1, 
+                                        linewidths=0
+                                    )
+                                    
+                                    # 4. Nodes Layer B: The "Core" (Hard Data)
+                                    # Small, high opacity (alpha=0.9), with a thin white rim
+                                    nx.draw_networkx_nodes(
+                                        graph, pos, ax=ax, 
+                                        node_size=[s * 1.5 for s in base_sizes], 
+                                        node_color=colors, 
+                                        alpha=0.95, 
+                                        linewidths=0.5,
+                                        edgecolors='#FFFFFF' # The white rim makes them look crisp
+                                    )
+                                    
+                                    # 5. Smart Labeling: Only label the "Hubs" (Top 10%)
                                     degrees = dict(graph.degree())
-                                    # Sort nodes by importance
-                                    top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.15)]
-                                    labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
+                                    if len(graph) > 0:
+                                        # Sort nodes by degree (connections)
+                                        top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.10)]
+                                        # Only creating labels for the top nodes
+                                        labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
+                                        
+                                        # Draw labels with high contrast
+                                        nx.draw_networkx_labels(
+                                            graph, pos, ax=ax, 
+                                            labels=labels, 
+                                            font_size=4, 
+                                            font_color='#FFFFFF', 
+                                            font_family='monospace',
+                                            font_weight='bold'
+                                        )
                                     
-                                    text = nx.draw_networkx_labels(graph, pos, ax=ax, labels=labels, font_size=5, font_color='#E0E0E0', font_family='monospace')
-                                    
-                                    # Title Style
-                                    ax.set_title(title, color='#00FF00', fontsize=8, loc='left', fontfamily='monospace')
+                                    # Title Style: Tech Green
+                                    ax.set_title(f"// {title}", color='#00FF00', fontsize=7, loc='left', fontfamily='monospace')
                                     ax.axis('off')
 
                                 # --- 3. LAYOUTS ---
