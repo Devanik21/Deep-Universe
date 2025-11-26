@@ -6051,93 +6051,42 @@ def main():
                                     G.add_edge(src, tgt, weight=r.probability, color=edge_color)
 
                                 # --- 2. THE NEON RENDERER (Fixed Visibility) ---
-                                # --- 2. THE NEON RENDERER (V3.0: SYNAPTIC ARCS) ---
-                                # --- 2. THE NEON RENDERER (V3.1: MINIMALIST HUD) ---
                                 def plot_neon(graph, pos, ax, title):
-                                    # 1. Background: Deep Void
+                                    # Background: Deep Void
                                     ax.set_facecolor('#050505')
                                     
-                                    # 2. PREPARE DATA
+                                    # EDGES: Separate them by color to draw them distinctly
                                     edges = graph.edges(data=True)
-                                    weights = [d.get('weight', 0.5) for u, v, d in edges]
-                                    widths = [0.3 + (w * 1.2) for w in weights] # Slightly thinner lines
+                                    edge_colors_list = [d.get('color', '#4444FF') for u, v, d in edges]
                                     
-                                    edge_colors = [d.get('color', '#4444FF') for u, v, d in edges]
-                                    
-                                    # 3. DRAW EDGES (SYNAPTIC ARCS)
+                                    # Draw edges with HIGH opacity (0.6) and distinct width
                                     nx.draw_networkx_edges(
                                         graph, pos, ax=ax, 
-                                        edge_color=edge_colors, 
-                                        width=widths, 
-                                        alpha=0.5,  # Slightly more transparent to reduce clutter
-                                        connectionstyle="arc3,rad=0.1",
+                                        edge_color=edge_colors_list, 
+                                        width=0.8,  # Thicker lines
+                                        alpha=0.6,  # Much more visible!
                                         arrows=True,
                                         arrowstyle='-|>', 
                                         arrowsize=5
                                     )
                                     
-                                    # 4. NODES (NEON HALOS)
+                                    # NODES: Sharp "Halo" Style
                                     base_sizes = [graph.nodes[n].get('size', 5) for n in graph.nodes()]
                                     node_colors = [graph.nodes[n].get('color', '#FFF') for n in graph.nodes()]
                                     
-                                    # Outer Glow (Reduced size for cleaner look)
-                                    nx.draw_networkx_nodes(
-                                        graph, pos, ax=ax, 
-                                        node_size=[s*6 for s in base_sizes], 
-                                        node_color=node_colors, 
-                                        alpha=0.1, 
-                                        linewidths=0
-                                    )
+                                    # Outer Glow
+                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*6 for s in base_sizes], node_color=node_colors, alpha=0.15, linewidths=0)
                                     # Inner Core
-                                    nx.draw_networkx_nodes(
-                                        graph, pos, ax=ax, 
-                                        node_size=[s*1.2 for s in base_sizes], 
-                                        node_color=node_colors, 
-                                        alpha=0.95, 
-                                        linewidths=0.6, 
-                                        edgecolors='white'
-                                    )
+                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*1.5 for s in base_sizes], node_color=node_colors, alpha=0.9, linewidths=0.5, edgecolors='white')
                                     
-                                    # 5. SMART LABELING (AGGRESSIVE CLEANUP)
+                                    # LABELS: Only Hubs
                                     degrees = dict(graph.degree())
                                     if len(graph) > 0:
-                                        # STRICT LIMIT: Only label the top 10 nodes MAX, or top 8%, whichever is smaller.
-                                        # This prevents the "Wall of Text" effect.
-                                        limit = min(10, max(3, int(len(graph) * 0.08)))
-                                        top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:limit]
-                                        
-                                        labels = {}
-                                        for n in graph.nodes():
-                                            if n in top_nodes:
-                                                # 1. Strip ID: "Proto_a1b2" -> "Proto"
-                                                clean = n.split('_')[0] 
-                                                # 2. Smart Truncate: "Proto-Omega-Metallic" -> "Proto-Omega.."
-                                                parts = clean.split('-')
-                                                if len(parts) > 2:
-                                                    short_name = f"{parts[0]}-{parts[1]}.."
-                                                else:
-                                                    short_name = clean
-                                                
-                                                # 3. Hard Cap: Max 12 characters
-                                                labels[n] = short_name[:12] 
-                                            else:
-                                                labels[n] = ""
-                                        
-                                        # Draw Labels with TINY font and LIGHTER box
-                                        text_items = nx.draw_networkx_labels(
-                                            graph, pos, ax=ax, 
-                                            labels=labels, 
-                                            font_size=4, # Tiny Tech Font
-                                            font_color='#00FF00', 
-                                            font_family='monospace', 
-                                            font_weight='bold'
-                                        )
-                                        # Lighter, tighter background box
-                                        for _, t in text_items.items():
-                                            t.set_bbox(dict(facecolor='black', alpha=0.4, edgecolor='none', pad=0.2))
+                                        top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.15)]
+                                        labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
+                                        nx.draw_networkx_labels(graph, pos, ax=ax, labels=labels, font_size=5, font_color='#E0E0E0', font_family='monospace', font_weight='bold')
                                     
-                                    # Title Style
-                                    ax.set_title(f"// {title}", color='#00FF00', fontsize=7, loc='left', fontfamily='monospace')
+                                    ax.set_title(f"// {title}", color='#00FF00', fontsize=8, loc='left', fontfamily='monospace')
                                     ax.axis('off')
 
                                 # --- 3. LAYOUTS ---
