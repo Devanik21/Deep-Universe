@@ -2675,15 +2675,20 @@ def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
 # ========================================================
 # UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
 # ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY (Detailed)
+# ========================================================
 def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
     """
-    Futuristic 'Cyber-HUD' visualization. 
-    Organizes messy hairballs into glowing, organized clusters.
+    Futuristic 'Cyber-HUD' visualization with added network centrality detail.
+    - Node size reflects both mass and influence (centrality).
+    - Node ring color indicates dominant outgoing logic (Green=Grow, Pink=Decay).
     """
     G = nx.DiGraph()
     
-    # --- 1. BUILD GRAPH & ASSIGN ROLES ---
-    # We assign roles to color-code nodes strictly
+    # --- 1. BUILD GRAPH & ASSIGN ROLES/LOGIC TALLY ---
+    logic_tally = {} # To store counts of rule types per node
+    
     for comp in genotype.component_genes.values():
         role = "Structure"
         if comp.motility > 0: role = "Motor"
@@ -2691,36 +2696,46 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         elif comp.compute > 0: role = "Processor"
         elif comp.offense > 0: role = "Weapon"
         
-        # Size based on mass, but capped to prevent huge blobs covering text
-        size = 6 + (comp.mass * 4.0) 
+        # Base size based on mass, capped to prevent huge blobs
+        base_size = 6 + (comp.mass * 4.0) 
         
         G.add_node(
             comp.name,
-            size=size,
+            size=base_size,
             color=comp.color,
             role=role,
-            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}"
+            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}",
         )
+        logic_tally[comp.name] = {'grow': 0, 'decay': 0, 'other': 0}
 
+    # Add Rules (Edges) & Abstract Nodes
     for rule in genotype.rule_genes:
         if rule.is_disabled: continue
         
-        # Resolve Names
+        # 1. Resolve Target
         target_name = rule.action_param
         if target_name in genotype.component_genes:
             target_name = genotype.component_genes[target_name].name
         else:
-            # Abstract node (e.g., NEIGHBORS)
             if target_name not in G:
                 G.add_node(target_name, size=4, color="#888888", role="Abstract", hover_text="Abstract Target")
 
+        # 2. Resolve Source and Tally Logic
         source_name = "Always"
         if rule.conditions:
             source_name = rule.conditions[0]['source']
         
         if source_name not in G:
-            # Sensor Input Node
             G.add_node(source_name, size=4, color="#00FFFF", role="Input", hover_text="Sensory Input")
+        
+        # Tally logic type for source node (if it's a component)
+        if source_name in logic_tally:
+            if 'GROW' in rule.action_type:
+                logic_tally[source_name]['grow'] += 1
+            elif 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+                logic_tally[source_name]['decay'] += 1
+            else:
+                logic_tally[source_name]['other'] += 1
 
         # Edge Color Strategy: Neon
         edge_color = 'rgba(0, 255, 128, 0.4)' # Neon Green (Grow)
@@ -2731,8 +2746,11 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
 
         G.add_edge(source_name, target_name, weight=rule.probability, color=edge_color)
 
-    # --- 2. LAYOUT PHYSICS (The Untangling) ---
-    # Kamada-Kawai is better for "organic" unfolding than spring
+    # --- 2. LAYOUT PHYSICS & CENTRALITY CALCULATION ---
+    # Calculate Centrality (Node Influence)
+    degree_centrality = nx.degree_centrality(G)
+    
+    # Generate Layout
     try:
         pos = nx.kamada_kawai_layout(G)
     except:
@@ -2742,15 +2760,15 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
 
     # --- 3. GLOWING EDGES (Curved) ---
     node_count = len(G.nodes())
-    base_width = 0.3 if node_count > 100 else 0.8 # Thinner lines for cleaner look
+    base_width = 0.3 if node_count > 100 else 0.8 
 
     for i, (u, v, data) in enumerate(G.edges(data=True)):
         if u not in pos or v not in pos: continue
         x0, y0 = pos[u]
         x1, y1 = pos[v]
         
-        # Slight curve to look organic
         curvature = 0.1 if i % 2 == 0 else -0.1
+        # NOTE: Assumes get_bezier_curve is defined elsewhere in the file
         bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
         
         fig.add_trace(go.Scatter(
@@ -2761,14 +2779,14 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
             showlegend=False
         ))
 
-    # --- 4. NODE RENDERING ---
+    # --- 4. NODE RENDERING (Detailed) ---
     node_x, node_y = [], []
     node_colors = []
     node_sizes = []
     node_labels = [] 
     node_texts = []
-    
-    # "Halo" trace data (glow behind nodes)
+    node_line_colors = [] # New: Detailed Logic Ring Color
+
     halo_x, halo_y = [], []
     halo_sizes = []
     halo_colors = []
@@ -2779,12 +2797,32 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         
         node_x.append(x)
         node_y.append(y)
-        node_colors.append(data.get('color', '#FFF'))
-        node_sizes.append(data.get('size', 5))
-        node_texts.append(data.get('hover_text', ''))
         
-        # "HUD" Style Label Processing
-        # 1. Shorten the text (e.g., "Proto-Carbon-Node_32" -> "Node_32")
+        # Calculate new size: Base Size + Centrality Multiplier
+        centrality_score = degree_centrality.get(n_id, 0)
+        new_size = data.get('size', 5) + (centrality_score * 35) # High centrality hubs are bigger
+        node_sizes.append(new_size)
+        
+        node_colors.append(data.get('color', '#FFF'))
+        
+        # DETERMINE LOGIC RING COLOR (Detailed!)
+        line_color = 'rgba(255,255,255,0.8)' # Default: White/Neutral
+        if n_id in logic_tally:
+            tally = logic_tally[n_id]
+            if tally['grow'] > tally['decay'] and tally['grow'] > 0:
+                line_color = '#00FF00' # Neon Green: Excitatory Hub
+            elif tally['decay'] > tally['grow'] and tally['decay'] > 0:
+                line_color = '#FF00FF' # Hot Pink: Inhibitory/Attack Hub
+            # else remains neutral white/gray
+
+        node_line_colors.append(line_color)
+
+        # Update Hover Text with Centrality Detail
+        hover_text = data.get('hover_text', '')
+        hover_text += f"<br>Influence (Centrality): {centrality_score:.3f}"
+        node_texts.append(hover_text)
+        
+        # "HUD" Style Label Processing (Same as before)
         short_label = str(n_id)
         if "-" in short_label:
             short_label = short_label.split("-")[-1] 
@@ -2796,7 +2834,7 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         # Halo setup
         halo_x.append(x)
         halo_y.append(y)
-        halo_sizes.append(data.get('size', 5) * 3.0) # Halo is 3x larger
+        halo_sizes.append(new_size * 2.5) 
         halo_colors.append(data.get('color', '#FFF'))
 
     # Trace A: The Glow (Halo)
@@ -2806,7 +2844,7 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         marker=dict(
             size=halo_sizes,
             color=halo_colors,
-            opacity=0.2, # Transparent glow
+            opacity=0.2, 
             line=dict(width=0)
         ),
         hoverinfo='none',
@@ -2821,25 +2859,27 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         textposition="top center",
         # FUTURISTIC FONT SETTINGS
         textfont=dict(
-            family="Courier New", # Monospace looks techy
+            family="Courier New", 
             size=9, 
-            color='rgba(200, 220, 255, 0.7)' # Slight ghostly blue-white
+            color='rgba(200, 220, 255, 0.7)'
         ),
         hovertext=node_texts,
         hoverinfo='text',
         marker=dict(
             color=node_colors,
             size=node_sizes,
-            line=dict(width=1, color='white'), # Sharp white rim
+            # Use dynamically determined logic ring color!
+            line=dict(width=2, color=node_line_colors), 
             opacity=1.0
         ),
         name='Components'
     ))
 
     # Layout Styling (Deep Space HUD)
+    node_count = len([n for n in G.nodes() if G.nodes[n].get('role') != 'Input'])
     fig.update_layout(
         title=dict(
-            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#666'>// NODES: {node_count} //</span>", 
+            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#FF00FF'>// HUBS: {node_count} // CENTRALITY MAPPED //</span>", 
             x=0.05, 
             y=0.95,
             font=dict(size=16, color='#00ccff', family="Courier New")
@@ -2850,12 +2890,11 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         height=650,
-        plot_bgcolor='#050505', # Almost black
+        plot_bgcolor='#050505',
         paper_bgcolor='rgba(0,0,0,0)'
     )
     
     return fig
-
 
 
 # ========================================================
