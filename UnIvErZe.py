@@ -2670,136 +2670,230 @@ def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
 
 
 # ========================================================
-# UPGRADED: HYBRID 2D GRN (Clarity of V1 + Style of V2)
+# NEW: ADAPTIVE 2D GRN VISUALIZATION (THE "REFERENCE" STYLE)
+# ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
+# ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY (Detailed)
 # ========================================================
 def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
     """
-    The 'Gold Standard' visualization.
-    Combines the high readability of the old version with the dark aesthetic of the new one.
+    Futuristic 'Cyber-HUD' visualization with added network centrality detail.
+    - Node size reflects both mass and influence (centrality).
+    - Node ring color indicates dominant outgoing logic (Green=Grow, Pink=Decay).
     """
     G = nx.DiGraph()
     
-    # --- 1. BUILD GRAPH ---
-    # We use larger base sizes to match your 'Old Version' clarity
+    # --- 1. BUILD GRAPH & ASSIGN ROLES/LOGIC TALLY ---
+    logic_tally = {} # To store counts of rule types per node
+    
     for comp in genotype.component_genes.values():
         role = "Structure"
         if comp.motility > 0: role = "Motor"
-        elif comp.sense_light > 0: role = "Sensor"
+        elif comp.sense_light > 0 or comp.sense_minerals > 0: role = "Sensor"
         elif comp.compute > 0: role = "Processor"
+        elif comp.offense > 0: role = "Weapon"
         
-        # Base size matches your Old Version (Large, readable bubbles)
+        # Base size based on mass, capped to prevent huge blobs
+        base_size = 6 + (comp.mass * 4.0) 
+        
         G.add_node(
             comp.name,
-            size=25 + (comp.mass * 5.0), # Much bigger nodes!
+            size=base_size,
             color=comp.color,
             role=role,
-            label=comp.name # Full name for readability
+            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}",
         )
+        logic_tally[comp.name] = {'grow': 0, 'decay': 0, 'other': 0}
 
-    # Add Edges
+    # Add Rules (Edges) & Abstract Nodes
     for rule in genotype.rule_genes:
         if rule.is_disabled: continue
         
-        # Resolve Names
+        # 1. Resolve Target
         target_name = rule.action_param
         if target_name in genotype.component_genes:
             target_name = genotype.component_genes[target_name].name
         else:
             if target_name not in G:
-                G.add_node(target_name, size=15, color="#888888", role="Abstract", label=target_name)
+                G.add_node(target_name, size=4, color="#888888", role="Abstract", hover_text="Abstract Target")
 
-        source_name = rule.conditions[0]['source'] if rule.conditions else "Always"
+        # 2. Resolve Source and Tally Logic
+        source_name = "Always"
+        if rule.conditions:
+            source_name = rule.conditions[0]['source']
+        
         if source_name not in G:
-            G.add_node(source_name, size=15, color="#00FFFF", role="Input", label=source_name)
+            G.add_node(source_name, size=4, color="#00FFFF", role="Input", hover_text="Sensory Input")
+        
+        # Tally logic type for source node (if it's a component)
+        if source_name in logic_tally:
+            if 'GROW' in rule.action_type:
+                logic_tally[source_name]['grow'] += 1
+            elif 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+                logic_tally[source_name]['decay'] += 1
+            else:
+                logic_tally[source_name]['other'] += 1
 
-        # Distinct Edge Colors
-        edge_color = '#888' # Default Grey
-        if 'GROW' in rule.action_type: edge_color = '#00FF00' # Green
-        elif 'DIE' in rule.action_type: edge_color = '#FF0000' # Red
-        elif 'EMIT' in rule.action_type: edge_color = '#00FFFF' # Cyan
+        # Edge Color Strategy: Neon
+        edge_color = 'rgba(0, 255, 128, 0.4)' # Neon Green (Grow)
+        if 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+            edge_color = 'rgba(255, 50, 80, 0.5)' # Neon Red (Danger)
+        elif 'EMIT' in rule.action_type:
+            edge_color = 'rgba(0, 200, 255, 0.5)' # Cyan (Signal)
 
-        G.add_edge(source_name, target_name, color=edge_color, weight=2)
+        G.add_edge(source_name, target_name, weight=rule.probability, color=edge_color)
 
-    # --- 2. FORCE-DIRECTED LAYOUT (The "Organized" View) ---
-    # We force 'Kamada-Kawai' or 'Spring' which pulls connected nodes together.
-    # We NEVER use 'Random' here.
-    try:
-        pos = nx.kamada_kawai_layout(G) # This is the cleanest algorithm
-    except:
-        pos = nx.spring_layout(G, seed=layout_seed, k=0.8, iterations=100)
-
-    # --- 3. RENDER WITH PLOTLY (Interactive) ---
-    edge_x = []
-    edge_y = []
-    edge_colors = []
-
-    for edge in G.edges(data=True):
-        x0, y0 = pos[edge[0]]
-        x1, y1 = pos[edge[1]]
-        edge_x.extend([x0, x1, None])
-        edge_y.extend([y0, y1, None])
-        # We repeat the color 3 times for (x0, x1, None) to keep lists aligned
-        c = edge[2]['color']
-        edge_colors.extend([c, c, c])
-
-    # Edges Trace
-    edge_trace = go.Scatter(
-        x=edge_x, y=edge_y,
-        line=dict(width=1.5, color='#888'), # Base grey, simpler to render than individual colors in one trace
-        hoverinfo='none',
-        mode='lines'
-    )
-
-    # Nodes Trace
-    node_x = []
-    node_y = []
-    node_text = []
-    node_marker_colors = []
-    node_sizes = []
+    # --- 2. LAYOUT PHYSICS & CENTRALITY CALCULATION ---
+    # Calculate Centrality (Node Influence)
+    degree_centrality = nx.degree_centrality(G)
     
-    for node in G.nodes():
-        x, y = pos[node]
+    # Generate Layout
+    try:
+        pos = nx.kamada_kawai_layout(G)
+    except:
+        pos = nx.spring_layout(G, seed=layout_seed, k=0.5, iterations=100)
+
+    fig = go.Figure()
+
+    # --- 3. GLOWING EDGES (Curved) ---
+    node_count = len(G.nodes())
+    base_width = 0.3 if node_count > 100 else 0.8 
+
+    for i, (u, v, data) in enumerate(G.edges(data=True)):
+        if u not in pos or v not in pos: continue
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        
+        curvature = 0.1 if i % 2 == 0 else -0.1
+        # NOTE: Assumes get_bezier_curve is defined elsewhere in the file
+        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
+        
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode='lines',
+            line=dict(width=base_width, color=data['color']),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- 4. NODE RENDERING (Detailed) ---
+    node_x, node_y = [], []
+    node_colors = []
+    node_sizes = []
+    node_labels = [] 
+    node_texts = []
+    node_line_colors = [] # New: Detailed Logic Ring Color
+
+    halo_x, halo_y = [], []
+    halo_sizes = []
+    halo_colors = []
+
+    for node in G.nodes(data=True):
+        n_id, data = node
+        x, y = pos[n_id]
+        
         node_x.append(x)
         node_y.append(y)
-        data = G.nodes[node]
-        node_text.append(data['label'])
-        node_marker_colors.append(data['color'])
-        node_sizes.append(data['size'])
+        
+        # Calculate new size: Base Size + Centrality Multiplier
+        centrality_score = degree_centrality.get(n_id, 0)
+        new_size = data.get('size', 5) + (centrality_score * 35) # High centrality hubs are bigger
+        node_sizes.append(new_size)
+        
+        node_colors.append(data.get('color', '#FFF'))
+        
+        # DETERMINE LOGIC RING COLOR (Detailed!)
+        line_color = 'rgba(255,255,255,0.8)' # Default: White/Neutral
+        if n_id in logic_tally:
+            tally = logic_tally[n_id]
+            if tally['grow'] > tally['decay'] and tally['grow'] > 0:
+                line_color = '#00FF00' # Neon Green: Excitatory Hub
+            elif tally['decay'] > tally['grow'] and tally['decay'] > 0:
+                line_color = '#FF00FF' # Hot Pink: Inhibitory/Attack Hub
+            # else remains neutral white/gray
 
-    node_trace = go.Scatter(
-        x=node_x, y=node_y,
-        mode='markers+text', # Show Marker AND Text
-        text=node_text,
-        textposition="bottom center",
-        textfont=dict(
-            family="Arial",
-            size=14, # Readable font size!
-            color="white" # White text on dark background
-        ),
+        node_line_colors.append(line_color)
+
+        # Update Hover Text with Centrality Detail
+        hover_text = data.get('hover_text', '')
+        hover_text += f"<br>Influence (Centrality): {centrality_score:.3f}"
+        node_texts.append(hover_text)
+        
+        # "HUD" Style Label Processing (Same as before)
+        short_label = str(n_id)
+        if "-" in short_label:
+            short_label = short_label.split("-")[-1] 
+        if len(short_label) > 10: 
+            short_label = short_label[:8] + ".."
+            
+        node_labels.append(short_label)
+
+        # Halo setup
+        halo_x.append(x)
+        halo_y.append(y)
+        halo_sizes.append(new_size * 2.5) 
+        halo_colors.append(data.get('color', '#FFF'))
+
+    # Trace A: The Glow (Halo)
+    fig.add_trace(go.Scatter(
+        x=halo_x, y=halo_y,
+        mode='markers',
         marker=dict(
-            showscale=False,
-            color=node_marker_colors,
-            size=node_sizes,
-            line=dict(width=2, color='white') # White outline for contrast
-        )
-    )
+            size=halo_sizes,
+            color=halo_colors,
+            opacity=0.2, 
+            line=dict(width=0)
+        ),
+        hoverinfo='none',
+        showlegend=False
+    ))
 
-    # --- 4. LAYOUT ---
-    fig = go.Figure(data=[edge_trace, node_trace])
+    # Trace B: The Core Nodes & Labels
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text', 
+        text=node_labels,
+        textposition="top center",
+        # FUTURISTIC FONT SETTINGS
+        textfont=dict(
+            family="Courier New", 
+            size=9, 
+            color='rgba(200, 220, 255, 0.7)'
+        ),
+        hovertext=node_texts,
+        hoverinfo='text',
+        marker=dict(
+            color=node_colors,
+            size=node_sizes,
+            # Use dynamically determined logic ring color!
+            line=dict(width=2, color=node_line_colors), 
+            opacity=1.0
+        ),
+        name='Components'
+    ))
+
+    # Layout Styling (Deep Space HUD)
+    node_count = len([n for n in G.nodes() if G.nodes[n].get('role') != 'Input'])
     fig.update_layout(
-        # FIX IS HERE: Nested dictionary for title and font
         title=dict(
-            text="<b>Genetic Regulatory Network</b> (Hybrid View)",
-            font=dict(size=20, color="white")
+            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#FF00FF'>// HUBS: {node_count} // CENTRALITY MAPPED //</span>", 
+            x=0.05, 
+            y=0.95,
+            font=dict(size=16, color='#00ccff', family="Courier New")
         ),
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=20,l=5,r=5,t=40),
+        margin=dict(b=20, l=20, r=20, t=50),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        plot_bgcolor='#0e1117', # Streamlit Dark Blue/Grey
+        height=650,
+        plot_bgcolor='#050505',
         paper_bgcolor='rgba(0,0,0,0)'
     )
+    
     return fig
 
 
@@ -3084,7 +3178,6 @@ def visualize_grn_sankey(genotype: Genotype) -> go.Figure:
     """
     Replaces the hairball graphs with a Logic Flow Circuit (Sankey Diagram).
     Visualizes: SENSORS -> LOGIC GATES -> ACTUATORS
-    THEME: Dark Mode / Neon Cyberpunk
     """
     labels = []
     sources = []
@@ -3103,82 +3196,66 @@ def visualize_grn_sankey(genotype: Genotype) -> go.Figure:
 
     # Process Rules
     for i, rule in enumerate(genotype.rule_genes):
-        if rule.is_disabled: continue
-
-        # Create a "Logic Node" for the rule itself (The Processor)
-        # Color: Bright Purple for Logic
-        rule_name = f"RULE {i}:<br>{rule.action_type}"
-        rule_color = "#BD00FF" 
+        # Create a "Logic Node" for the rule itself
+        rule_name = f"Rule {i}<br>({rule.action_type})"
+        rule_color = "#FFB347" if not rule.is_disabled else "#555555"
         rule_idx = get_node_index(rule_name, rule_color)
 
         # 1. Map Conditions (Inputs/Sensors) -> Rule
         if not rule.conditions:
             # Always active
-            src_idx = get_node_index("ALWAYS TRUE", "#555555")
+            src_idx = get_node_index("ALWAYS TRUE", "#DDDDDD")
             sources.append(src_idx)
             targets.append(rule_idx)
             values.append(1.0)
         else:
             for cond in rule.conditions:
                 # Sensor Node
-                # Color: Cyan for Sensors
-                sensor_name = f"INPUT:<br>{cond['source']}"
-                sensor_color = "#00FFFF" 
+                sensor_name = f"SENSE:<br>{cond['source']}"
+                sensor_color = "#88CCEE" # Light Blue for Sensors
                 src_idx = get_node_index(sensor_name, sensor_color)
                 
                 sources.append(src_idx)
                 targets.append(rule_idx)
-                values.append(rule.probability * 2)
+                values.append(rule.probability * 2) # Thickness based on probability
 
         # 2. Map Rule -> Actions (Outputs/Actuators)
+        # Action Node
         action_target = rule.action_param
-        
-        # Get component color if the target is a component
+        # Try to get component color if the target is a component
         comp = genotype.component_genes.get(action_target)
-        if comp:
-            # Use the component's actual neon color
-            action_color = comp.color 
-            target_display_name = f"COMP:<br>{comp.name}"
-        else:
-            # Generic Action (e.g., TIMER) -> Neon Green
-            action_color = "#00FF00" 
-            target_display_name = f"ACT:<br>{action_target}"
+        action_color = comp.color if comp else "#FF6B6B" # Red for generic actions
         
-        tgt_idx = get_node_index(target_display_name, action_color)
+        action_name = f"ACT:<br>{action_target}"
+        
+        tgt_idx = get_node_index(action_name, action_color)
         
         sources.append(rule_idx)
         targets.append(tgt_idx)
         values.append(rule.probability * 2)
 
-    # --- RENDER IN DARK MODE ---
     fig = go.Figure(data=[go.Sankey(
         node=dict(
-            pad=20,
-            thickness=15,
-            line=dict(color="white", width=0.5), # White rim around nodes
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
             label=labels,
-            color=node_colors,
-            # Text styling
-            hoverinfo='all'
+            color=node_colors
         ),
         link=dict(
             source=sources,
             target=targets,
             value=values,
-            color="rgba(100, 100, 100, 0.3)" # Subtle grey transparency for links
+            color="rgba(150, 150, 150, 0.2)" # Semi-transparent links
         )
     )])
 
     fig.update_layout(
-        title=dict(
-            text="<b>// LOGIC CIRCUIT (SENSORS → ACTUATORS)</b>", 
-            font=dict(size=14, color="#00FFFF", family="Courier New")
-        ),
-        font=dict(size=10, color="white", family="monospace"), # White text
+        title_text="<b>Genetic Logic Circuit (Sensors → Logic → Actions)</b>",
+        font_size=10,
         height=500,
-        plot_bgcolor='#050505', # Deep black background
-        paper_bgcolor='#050505',
-        margin=dict(l=10, r=10, t=40, b=10)
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)'
     )
     return fig
 
