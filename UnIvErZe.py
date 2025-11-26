@@ -2420,11 +2420,684 @@ def apply_physics_drift(settings: Dict):
 # ========================================================
 
 # ========================================================
+
+
 #
 # PART 6: VISUALIZATION (THE "VIEWSCREEN")
 #
 # ========================================================
 
+# ========================================================
+# ADD THIS HELPER FUNCTION (For the Curved Lines)
+# ========================================================
+
+
+
+# ========================================================
+# NEW: BIO-DIGITAL CORTEX (CYAN/GREEN WEB)
+# ========================================================
+# ========================================================
+# UPGRADED: HIGH-DETAIL BIO-DIGITAL CORTEX (CYAN/GREEN)
+# ========================================================
+def visualize_neuro_web_cyan(genotype: Genotype, seed: int = 42) -> go.Figure:
+    """
+    A distinct, high-detail 'Neural Web' visualization.
+    - Theme: Pure Cyan, Teal, and Neon Green.
+    - Layout: Organic 'Brain Slice' (dense center, tendrils).
+    - Features: Directional markers, symbolic nodes, and HUD labels.
+    """
+    G = nx.DiGraph()
+    
+    # --- 1. BUILD GRAPH & ASSIGN ROLES/COLORS ---
+    for comp in genotype.component_genes.values():
+        role = "Structure"
+        if comp.motility > 0: role = "Motor/Output"
+        elif comp.sense_light > 0 or comp.sense_minerals > 0: role = "Sensor/Input"
+        elif comp.compute > 0: role = "Processor"
+
+        # Strict Bio-Digital Palette
+        if role == "Motor/Output": color = '#00FF7F'   # Spring Green (Action)
+        elif role == "Sensor/Input": color = '#00FFFF' # Aqua (Input)
+        elif role == "Processor": color = '#20B2AA'  # Light Sea Green (Logic)
+        else: color = '#008B8B'                      # Dark Cyan (Structure)
+
+        # Size heavily weighted by complexity/mass
+        size = 8 + (comp.mass * 5.0)
+        
+        G.add_node(
+            comp.name,
+            size=size,
+            color=color,
+            role=role,
+            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}"
+        )
+
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        # Resolve Target & Source
+        target_id = rule.action_param
+        target_name = genotype.component_genes[target_id].name if target_id in genotype.component_genes else str(target_id)
+        if target_name not in G:
+            G.add_node(target_name, size=4, color='#2F4F4F', role="Abstract", hover_text="Abstract Target")
+
+        source_name = rule.conditions[0]['source'] if rule.conditions else "Input"
+        if source_name not in G:
+            G.add_node(source_name, size=4, color='#AFEEEE', role="Sensor", hover_text="Sensory Input")
+
+        # Edge Color: Cyan for signals, Green for growth
+        edge_color = 'rgba(0, 255, 127, 0.4)' if 'GROW' in rule.action_type else 'rgba(0, 255, 255, 0.25)'
+        
+        # Add a rich connection description for hover
+        description = f"{source_name} → {target_name} ({rule.action_type} p={rule.probability:.2f})"
+        G.add_edge(source_name, target_name, color=edge_color, desc=description)
+
+    # --- 2. LAYOUT (Brain Slice Physics) ---
+    try:
+        # Kamada-Kawai for organic spread
+        pos = nx.kamada_kawai_layout(G)
+    except:
+        pos = nx.spring_layout(G, seed=seed, k=0.3)
+
+    fig = go.Figure()
+
+    # --- 3. RENDER SYNAPSES (Curved Web with Directional Hint) ---
+    directional_markers_x, directional_markers_y, directional_texts = [], [], []
+
+    for i, (u, v, data) in enumerate(G.edges(data=True)):
+        if u not in pos or v not in pos: continue
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        
+        # 1. Organic curve (Requires get_bezier_curve to be defined)
+        curve_dir = 0.1 if i % 2 == 0 else -0.1
+        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curve_dir)
+        
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode='lines',
+            line=dict(width=0.7, color=data['color']),
+            hoverinfo='none',
+            showlegend=False
+        ))
+        
+        # 2. Add directional marker at the Target (v) end
+        # We place the marker close to the target (e.g., at 90% of the last segment)
+        # Using a marker trace to hint direction and provide edge hover info
+        directional_markers_x.append(x1)
+        directional_markers_y.append(y1)
+        directional_texts.append(data.get('desc', 'Connection'))
+        
+    # Trace for Directional Markers (The "Synapse Firing" effect)
+    fig.add_trace(go.Scatter(
+        x=directional_markers_x, y=directional_markers_y,
+        mode='markers',
+        marker=dict(
+            symbol='diamond', 
+            size=4, 
+            color='#FF00FF', # Use a bold color (Magenta) that contrasts with Cyan/Green for emphasis
+            line=dict(width=0)
+        ),
+        text=directional_texts,
+        hoverinfo='text',
+        name='Synapse Flow'
+    ))
+
+
+    # --- 4. RENDER NEURONS (Nodes) ---
+    node_x, node_y = [], []
+    node_colors = []
+    node_sizes = []
+    node_symbols = []
+    node_text = []
+    node_labels = [] # Visible labels
+    
+    # Glow layers
+    glow_x, glow_y = [], []
+    glow_sizes = []
+    glow_colors = []
+
+    for node_id, data in G.nodes(data=True):
+        x, y = pos[node_id]
+        node_x.append(x); node_y.append(y)
+        glow_x.append(x); glow_y.append(y)
+        
+        c = data.get('color', '#00FFFF')
+        s = data.get('size', 6)
+        role = data.get('role', 'Component')
+        
+        node_colors.append(c)
+        node_sizes.append(s)
+        node_text.append(data.get('hover_text', node_id))
+        
+        # Symbolic Coding
+        if role == 'Sensor':
+            node_symbols.append('diamond')
+        elif role == 'Motor/Output':
+            node_symbols.append('square')
+        else:
+            node_symbols.append('circle')
+            
+        # HUD Labeling Logic: Only label key nodes
+        short_name = str(node_id).split('-')[-1] if '-' in str(node_id) else str(node_id)
+        if s > 15 or role in ['Sensor', 'Motor/Output']:
+             node_labels.append(short_name)
+        else: 
+            node_labels.append("")
+
+        # Create "Bioluminescent" Glow
+        glow_colors.append(c)
+        glow_sizes.append(s * 4.0)
+
+    # Trace A: The Glow
+    fig.add_trace(go.Scatter(
+        x=glow_x, y=glow_y,
+        mode='markers',
+        marker=dict(size=glow_sizes, color=glow_colors, opacity=0.15),
+        hoverinfo='none', showlegend=False
+    ))
+
+    # Trace B: The Core
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        text=node_labels,
+        textposition="top center",
+        # Futuristic HUD Text Style
+        textfont=dict(color="#00FF00", family="Courier New", size=9), 
+        hovertext=node_text,
+        hoverinfo='text',
+        marker=dict(
+            size=node_sizes, 
+            color=node_colors, 
+            symbol=node_symbols,
+            line=dict(width=1.5, color='#E0FFFF'), # Sharp Cyan Rim
+            opacity=1.0
+        ),
+        name='Neurons'
+    ))
+
+    # --- 5. LAYOUT ---
+    fig.update_layout(
+        title=dict(
+            text=f"<b>BIO-DIGITAL CORTEX</b> <span style='font-size:12px;color:#00FF7F'>// NODES: {len(G.nodes())} // FLOW: Magenta //</span>",
+            font=dict(family="Courier New", size=14, color="#00FFFF"),
+            x=0.05, y=0.95
+        ),
+        showlegend=False,
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=550, # Slightly increased height
+        plot_bgcolor='#000505',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
+
+
+def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
+    """
+    Generates x, y coordinates for a quadratic Bezier curve.
+    """
+    # Midpoint with offset for curvature
+    mx = (x0 + x1) / 2
+    my = (y0 + y1) / 2
+    
+    # Perpendicular vector
+    dx = x1 - x0
+    dy = y1 - y0
+    dist = np.sqrt(dx*dx + dy*dy)
+    
+    if dist == 0:
+        return [x0], [y0]
+
+    # Offset midpoint perpendicularly
+    ox = -dy * curvature
+    oy = dx * curvature
+    
+    ctrl_x = mx + ox
+    ctrl_y = my + oy
+    
+    t = np.linspace(0, 1, points)
+    bx = (1-t)**2 * x0 + 2*(1-t)*t * ctrl_x + t**2 * x1
+    by = (1-t)**2 * y0 + 2*(1-t)*t * ctrl_y + t**2 * y1
+    
+    return bx, by
+
+
+
+
+
+# ========================================================
+# NEW: ADAPTIVE 2D GRN VISUALIZATION (THE "REFERENCE" STYLE)
+# ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
+# ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY (Detailed)
+# ========================================================
+def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
+    """
+    Futuristic 'Cyber-HUD' visualization with added network centrality detail.
+    - Node size reflects both mass and influence (centrality).
+    - Node ring color indicates dominant outgoing logic (Green=Grow, Pink=Decay).
+    """
+    G = nx.DiGraph()
+    
+    # --- 1. BUILD GRAPH & ASSIGN ROLES/LOGIC TALLY ---
+    logic_tally = {} # To store counts of rule types per node
+    
+    for comp in genotype.component_genes.values():
+        role = "Structure"
+        if comp.motility > 0: role = "Motor"
+        elif comp.sense_light > 0 or comp.sense_minerals > 0: role = "Sensor"
+        elif comp.compute > 0: role = "Processor"
+        elif comp.offense > 0: role = "Weapon"
+        
+        # Base size based on mass, capped to prevent huge blobs
+        base_size = 6 + (comp.mass * 4.0) 
+        
+        G.add_node(
+            comp.name,
+            size=base_size,
+            color=comp.color,
+            role=role,
+            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}",
+        )
+        logic_tally[comp.name] = {'grow': 0, 'decay': 0, 'other': 0}
+
+    # Add Rules (Edges) & Abstract Nodes
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        # 1. Resolve Target
+        target_name = rule.action_param
+        if target_name in genotype.component_genes:
+            target_name = genotype.component_genes[target_name].name
+        else:
+            if target_name not in G:
+                G.add_node(target_name, size=4, color="#888888", role="Abstract", hover_text="Abstract Target")
+
+        # 2. Resolve Source and Tally Logic
+        source_name = "Always"
+        if rule.conditions:
+            source_name = rule.conditions[0]['source']
+        
+        if source_name not in G:
+            G.add_node(source_name, size=4, color="#00FFFF", role="Input", hover_text="Sensory Input")
+        
+        # Tally logic type for source node (if it's a component)
+        if source_name in logic_tally:
+            if 'GROW' in rule.action_type:
+                logic_tally[source_name]['grow'] += 1
+            elif 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+                logic_tally[source_name]['decay'] += 1
+            else:
+                logic_tally[source_name]['other'] += 1
+
+        # Edge Color Strategy: Neon
+        edge_color = 'rgba(0, 255, 128, 0.4)' # Neon Green (Grow)
+        if 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+            edge_color = 'rgba(255, 50, 80, 0.5)' # Neon Red (Danger)
+        elif 'EMIT' in rule.action_type:
+            edge_color = 'rgba(0, 200, 255, 0.5)' # Cyan (Signal)
+
+        G.add_edge(source_name, target_name, weight=rule.probability, color=edge_color)
+
+    # --- 2. LAYOUT PHYSICS & CENTRALITY CALCULATION ---
+    # Calculate Centrality (Node Influence)
+    degree_centrality = nx.degree_centrality(G)
+    
+    # Generate Layout
+    try:
+        pos = nx.kamada_kawai_layout(G)
+    except:
+        pos = nx.spring_layout(G, seed=layout_seed, k=0.5, iterations=100)
+
+    fig = go.Figure()
+
+    # --- 3. GLOWING EDGES (Curved) ---
+    node_count = len(G.nodes())
+    base_width = 0.3 if node_count > 100 else 0.8 
+
+    for i, (u, v, data) in enumerate(G.edges(data=True)):
+        if u not in pos or v not in pos: continue
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        
+        curvature = 0.1 if i % 2 == 0 else -0.1
+        # NOTE: Assumes get_bezier_curve is defined elsewhere in the file
+        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
+        
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode='lines',
+            line=dict(width=base_width, color=data['color']),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- 4. NODE RENDERING (Detailed) ---
+    node_x, node_y = [], []
+    node_colors = []
+    node_sizes = []
+    node_labels = [] 
+    node_texts = []
+    node_line_colors = [] # New: Detailed Logic Ring Color
+
+    halo_x, halo_y = [], []
+    halo_sizes = []
+    halo_colors = []
+
+    for node in G.nodes(data=True):
+        n_id, data = node
+        x, y = pos[n_id]
+        
+        node_x.append(x)
+        node_y.append(y)
+        
+        # Calculate new size: Base Size + Centrality Multiplier
+        centrality_score = degree_centrality.get(n_id, 0)
+        new_size = data.get('size', 5) + (centrality_score * 35) # High centrality hubs are bigger
+        node_sizes.append(new_size)
+        
+        node_colors.append(data.get('color', '#FFF'))
+        
+        # DETERMINE LOGIC RING COLOR (Detailed!)
+        line_color = 'rgba(255,255,255,0.8)' # Default: White/Neutral
+        if n_id in logic_tally:
+            tally = logic_tally[n_id]
+            if tally['grow'] > tally['decay'] and tally['grow'] > 0:
+                line_color = '#00FF00' # Neon Green: Excitatory Hub
+            elif tally['decay'] > tally['grow'] and tally['decay'] > 0:
+                line_color = '#FF00FF' # Hot Pink: Inhibitory/Attack Hub
+            # else remains neutral white/gray
+
+        node_line_colors.append(line_color)
+
+        # Update Hover Text with Centrality Detail
+        hover_text = data.get('hover_text', '')
+        hover_text += f"<br>Influence (Centrality): {centrality_score:.3f}"
+        node_texts.append(hover_text)
+        
+        # "HUD" Style Label Processing (Same as before)
+        short_label = str(n_id)
+        if "-" in short_label:
+            short_label = short_label.split("-")[-1] 
+        if len(short_label) > 10: 
+            short_label = short_label[:8] + ".."
+            
+        node_labels.append(short_label)
+
+        # Halo setup
+        halo_x.append(x)
+        halo_y.append(y)
+        halo_sizes.append(new_size * 2.5) 
+        halo_colors.append(data.get('color', '#FFF'))
+
+    # Trace A: The Glow (Halo)
+    fig.add_trace(go.Scatter(
+        x=halo_x, y=halo_y,
+        mode='markers',
+        marker=dict(
+            size=halo_sizes,
+            color=halo_colors,
+            opacity=0.2, 
+            line=dict(width=0)
+        ),
+        hoverinfo='none',
+        showlegend=False
+    ))
+
+    # Trace B: The Core Nodes & Labels
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text', 
+        text=node_labels,
+        textposition="top center",
+        # FUTURISTIC FONT SETTINGS
+        textfont=dict(
+            family="Courier New", 
+            size=9, 
+            color='rgba(200, 220, 255, 0.7)'
+        ),
+        hovertext=node_texts,
+        hoverinfo='text',
+        marker=dict(
+            color=node_colors,
+            size=node_sizes,
+            # Use dynamically determined logic ring color!
+            line=dict(width=2, color=node_line_colors), 
+            opacity=1.0
+        ),
+        name='Components'
+    ))
+
+    # Layout Styling (Deep Space HUD)
+    node_count = len([n for n in G.nodes() if G.nodes[n].get('role') != 'Input'])
+    fig.update_layout(
+        title=dict(
+            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#FF00FF'>// HUBS: {node_count} // CENTRALITY MAPPED //</span>", 
+            x=0.05, 
+            y=0.95,
+            font=dict(size=16, color='#00ccff', family="Courier New")
+        ),
+        showlegend=False,
+        hovermode='closest',
+        margin=dict(b=20, l=20, r=20, t=50),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=650,
+        plot_bgcolor='#050505',
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
+
+
+# ========================================================
+# NEW: 3D NEURAL TOPOGRAPHY (SCI-FI VISUALIZATION)
+# ========================================================
+# ========================================================
+# UPGRADED: 3D "CYBERPUNK HOLOMAP" NEURAL TOPOGRAPHY
+# ========================================================
+def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
+    """
+    Cyberpunk 3D Visualization of the GRN.
+    - Uses 3D Force-Directed Layout
+    - Enhanced 'Neon' edges and 'Neural Halo'
+    - 'HUD' text style with automatic label shortening
+    """
+    # 1. Build the Graph Structure (Same logic as 2D)
+    G = nx.DiGraph()
+    
+    # Add Components (Nodes)
+    for comp in genotype.component_genes.values():
+        G.add_node(
+            comp.name,
+            size=max(5, comp.mass * 8.0),
+            color=comp.color,
+            node_type="Component",
+            desc=f"Mass: {comp.mass:.2f}"
+        )
+
+    # Add Rules (Edges) & Abstract Nodes
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        # Resolve Target
+        target_id = rule.action_param
+        if target_id in genotype.component_genes:
+            target_name = genotype.component_genes[target_id].name
+        else:
+            target_name = str(target_id)
+            if target_name not in G:
+                G.add_node(target_name, size=3, color='#888888', node_type="Abstract", desc="Abstract Target")
+
+        # Resolve Source
+        source_name = "Always"
+        if rule.conditions:
+            source_name = rule.conditions[0]['source']
+        
+        if source_name not in G:
+            G.add_node(source_name, size=3, color='#00FFFF', node_type="Sensor", desc="Sensor Input")
+
+        # Add Edge
+        edge_type = 'excitatory' if 'GROW' in rule.action_type else ('inhibitory' if 'DIE' in rule.action_type else 'modulatory')
+        G.add_edge(source_name, target_name, weight=rule.probability, type=edge_type)
+
+    # 2. Generate 3D Positions
+    try:
+        # Reduced k for tighter, more complex clusters
+        pos = nx.spring_layout(G, dim=3, seed=42, k=1.0/np.sqrt(len(G.nodes()) or 1), iterations=100) 
+    except:
+        return go.Figure()
+
+    # --- 3. RENDER EDGES (The Neural Web) ---
+    edge_traces = []
+    
+    for u, v, data in G.edges(data=True):
+        if u not in pos or v not in pos: continue
+        x0, y0, z0 = pos[u]
+        x1, y1, z1 = pos[v]
+        
+        weight = data.get('weight', 0.5)
+        # Increased alpha for neon visibility
+        alpha = max(0.15, weight * 0.7) 
+        
+        conn_type = data.get('type', 'modulatory')
+        if conn_type == 'excitatory':
+            edge_color = f'rgba(0, 255, 200, {alpha})' # Bright Cyan
+        elif conn_type == 'inhibitory':
+            edge_color = f'rgba(255, 50, 80, {alpha})' # Hot Pink/Red
+        else:
+            edge_color = f'rgba(100, 100, 255, {alpha})' # Electric Blue
+
+        edge_traces.append(go.Scatter3d(
+            x=[x0, x1, None], y=[y0, y1, None], z=[z0, z1, None],
+            mode='lines',
+            line=dict(width=2 * weight, color=edge_color),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- 4. RENDER NODES ---
+    node_x, node_y, node_z = [], [], []
+    node_colors = []
+    node_sizes = []
+    node_symbols = []
+    node_texts = []
+    node_labels = [] # Visible labels
+    
+    # Halo Data
+    halo_sizes = []
+    halo_colors = []
+
+    for node, data in G.nodes(data=True):
+        x, y, z = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_z.append(z)
+        
+        color = data.get('color', '#FFFFFF')
+        size = data.get('size', 5)
+        n_type = data.get('node_type', 'Unknown')
+        
+        node_colors.append(color)
+        node_sizes.append(size)
+        
+        # Halos are larger and transparent
+        halo_sizes.append(size * 2.5)
+        halo_colors.append(color)
+        
+        node_texts.append(f"<b>{node}</b><br>{n_type}<br>{data.get('desc','')}")
+
+        # --- SMART LABELING (Cyber-HUD) ---
+        # 1. Shorten the text
+        short_label = str(node)
+        if "-" in short_label:
+            short_label = short_label.split("-")[-1] 
+        if len(short_label) > 10: 
+            short_label = short_label[:8] + ".."
+            
+        # 2. Shape Coding
+        if n_type == 'Sensor': 
+            node_symbols.append('diamond')
+            node_labels.append(f"👁️ {short_label}")
+        elif n_type == 'Abstract':
+            node_symbols.append('square')
+            node_labels.append(f"⚡ {short_label}")
+        elif size > 15: # Only label core components if big enough (size threshold increased)
+            node_symbols.append('circle')
+            node_labels.append(short_label) 
+        else:
+            node_symbols.append('circle')
+            # Hide small node labels to prevent 3D clutter
+            node_labels.append("") 
+
+    # Trace: Neural Halo (Glow)
+    halo_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers',
+        marker=dict(
+            size=halo_sizes,
+            color=halo_colors,
+            opacity=0.2,
+            symbol=node_symbols
+        ),
+        hoverinfo='none',
+        showlegend=False
+    )
+
+    # Trace: Core Nodes
+    node_trace = go.Scatter3d(
+        x=node_x, y=node_y, z=node_z,
+        mode='markers+text',
+        text=node_labels,
+        textposition="top center",
+        # CYBERPUNK FONT SETTINGS
+        textfont=dict(
+            family="Courier New", # Monospace looks techy
+            size=9, 
+            color='rgba(0, 255, 200, 0.9)' # Bright Cyan/Teal
+        ), 
+        hovertext=node_texts,
+        hoverinfo='text',
+        marker=dict(
+            size=node_sizes,
+            color=node_colors,
+            symbol=node_symbols,
+            line=dict(width=2, color='rgba(255,255,255,0.8)'),
+            opacity=1.0
+        )
+    )
+
+    # --- 5. LAYOUT (The Void) ---
+    fig = go.Figure(data=edge_traces + [halo_trace, node_trace])
+    fig.update_layout(
+        title=dict(
+            # CYBERPUNK TITLE
+            text=f"<b>HOLOMAP: NEURAL ARCHITECTURE</b> <span style='font-size:12px;color:#FF0066'>// NODES: {len(G.nodes())} //</span>", 
+            font=dict(size=16, color="#00ccff", family="Courier New"), # Neon blue/cyan
+            x=0.05, y=0.95 # Left-aligned like a HUD overlay
+        ),
+        showlegend=False,
+        paper_bgcolor='rgba(0,0,0,0)',
+        scene=dict(
+            xaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            yaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            zaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
+            bgcolor='rgba(0,0,0,0)',
+            # Set a nice default camera view
+            camera=dict(eye=dict(x=1.8, y=1.8, z=1.8))
+        ),
+        height=600,
+        margin=dict(l=0, r=0, t=40, b=0)
+    )
+    
+    return fig
 # --- PASTE THIS NEW CODE BLOCK HERE ---
 
 def visualize_phenotype_mri(phenotype: Phenotype, grid: UniverseGrid) -> go.Figure:
@@ -3131,7 +3804,7 @@ def main():
     )
 
     
-    set_app_background("Gemini_Generated_Image_y99xn8y99xn8y99x.png")
+    set_app_background("Gemini_Generated_Image_6zf6sd6zf6sd6zf6.jpeg") 
     
     # --- CUSTOM CSS: TRANSPARENT SIDEBAR & HEADER ---
     st.markdown("""
@@ -5296,6 +5969,27 @@ def main():
                                 st.markdown("**Logic Circuit (Sensors → Acts)**")
                                 fig_circuit = visualize_grn_sankey(specimen)
                                 st.plotly_chart(fig_circuit, width='stretch', key=f"grn_circuit_{i}")
+
+                                # 4. NEW: Interactive Neural Topography
+                                st.markdown("**🧠 Neural Topography (Interactive 2D)**")
+                                fig_topo = visualize_grn_2d_interactive(specimen)
+                                st.plotly_chart(fig_topo, width='stretch', key=f"grn_topo_{i}")
+
+                                st.markdown("---")
+                                # 5. NEW: 3D Holographic View
+                                st.markdown("**🧊 Holographic Neural Map (3D)**")
+                                st.caption("Rotate, zoom, and explore the organism's brain structure in 3D space.")
+                                fig_3d = visualize_grn_3d_interactive(specimen)
+                                st.plotly_chart(fig_3d, width='stretch', key=f"grn_3d_{i}")
+
+                                st.markdown("---")
+                                
+                                # 6. NEW: Bio-Digital Cortex (Web)
+                                st.markdown("**🕸️ Bio-Digital Cortex (Network Density)**")
+                                st.caption("A focused visualization of the organism's synaptic complexity. Cyan represents sensory data; Green represents growth and action.")
+                                fig_web = visualize_neuro_web_cyan(specimen)
+                                st.plotly_chart(fig_web, width='stretch', key=f"grn_web_{i}")
+                                # <--- END INSERT ---
                                 
                                 # 4. Objectives
                                 if specimen.objective_weights:
@@ -5315,7 +6009,11 @@ def main():
                         st.markdown("---")
 
                         # ==========================================
-                        # PART 2: DEEP NETWORK ANALYSIS (HIGH-FIDELITY & READABLE)
+                        # PART 2: DEEP NETWORK ANALYSIS (HIGH-FIDELITY & ROBUST)
+                        # ==========================================
+                        # ==========================================
+                        # ==========================================
+                        # PART 2: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
                         # ==========================================
                         if i in st.session_state.loaded_specimen_scans:
                             if i not in st.session_state.loaded_specimen_networks:
@@ -5324,274 +6022,131 @@ def main():
                                     st.session_state.loaded_specimen_networks.add(i)
                                     st.rerun()
                             else:
-                                st.markdown("#### 🕸️ GRN Encyclopedia")
-                                st.caption("Visualizing the 'Brain' of the organism using 16 distinct topological lenses.")
+                                st.markdown("#### 🕸️ GRN Encyclopedia (Neural Pathways)")
                                 
-                                # --- 1. Construct Rich Graph Object ---
+                                # --- 1. Construct Graph (Now with Edge Types) ---
                                 G = nx.DiGraph()
-                                # Add Component Nodes (Genes)
-                                for comp_name, comp_gene in specimen.component_genes.items():
-                                    G.add_node(comp_name, type='component', color=comp_gene.color, shape='o')
-                                
-                                # Add Rule/Action Nodes (Logic Gates)
-                                for rule_idx, rule in enumerate(specimen.rule_genes):
-                                    # Action Node
-                                    action_label = f"{rule.action_type}\n({rule.action_param})"
-                                    action_id = f"R{rule_idx}:{rule.action_type}"
-                                    G.add_node(action_id, label=action_label, type='action', color='#FFB347', shape='s')
+                                for c in specimen.component_genes.values():
+                                    # Assign Neon Colors based on function
+                                    col = '#00FFFF' # Cyan (Sensor)
+                                    if c.motility > 0: col = '#00FF00' # Green (Motor)
+                                    elif c.compute > 0: col = '#008080' # Teal (Processor)
+                                    elif c.offense > 0: col = '#FF00FF' # Magenta (Weapon)
+                                    G.add_node(c.name, size=5+(c.mass*5), color=col)
                                     
-                                    # Sensor Edge (Component -> Rule)
-                                    source_node = list(specimen.component_genes.keys())[0] # Fallback
-                                    if rule.conditions:
-                                        type_cond = next((c for c in rule.conditions if c['source'] == 'self_type'), None)
-                                        if type_cond and type_cond['target_value'] in G.nodes():
-                                            source_node = type_cond['target_value']
+                                for r in specimen.rule_genes:
+                                    if r.is_disabled: continue
+                                    tgt = specimen.component_genes[r.action_param].name if r.action_param in specimen.component_genes else str(r.action_param)
+                                    if tgt not in G: G.add_node(tgt, size=3, color='#555555')
+                                    src = r.conditions[0]['source'] if r.conditions else "Input"
+                                    if src not in G: G.add_node(src, size=3, color='#FFFFFF')
                                     
-                                    G.add_edge(source_node, action_id, weight=1, type='sense')
-                                    
-                                    # Actuator Edge (Rule -> Target)
-                                    target = rule.action_param
-                                    if target in specimen.component_genes:
-                                        G.add_edge(action_id, target, weight=2, type='act')
-                                    else:
-                                        # Abstract target (e.g. 'NEIGHBORS', 'pulse_A')
-                                        if target not in G.nodes():
-                                            G.add_node(target, type='abstract', color='#DDDDDD', shape='^')
-                                        G.add_edge(action_id, target, weight=2, type='act')
-
-                                if not G.nodes:
-                                    st.warning("Empty Graph.")
-                                else:
-                                    # --- HELPER: Smart Plotting Function ---
-                                    import math
-                                    
-                                    def shorten_label(text, max_len=15):
-                                        """Smartly truncates biological names for readability."""
-                                        s_text = str(text)
-                                        # Remove common prefixes to save space
-                                        for prefix in ['Proto-', 'Neuro-', 'Causal-', 'Pseudo-', 'Spectral-', 'Quantum-']:
-                                            if s_text.startswith(prefix):
-                                                s_text = s_text.replace(prefix, "")
+                                    # CLASSIFY THE CONNECTION TYPE
+                                    edge_color = '#4444FF' # Default (Deep Blue)
+                                    if 'GROW' in r.action_type or 'EMIT' in r.action_type:
+                                        edge_color = '#00FFCC' # Bright Teal (Creation/Signal)
+                                    elif 'DIE' in r.action_type or 'ATTACK' in r.action_type or 'POISON' in r.action_type:
+                                        edge_color = '#FF0055' # Hot Pink/Red (Destruction)
                                         
-                                        # Truncate if still too long
-                                        if len(s_text) > max_len:
-                                            # Keep start and end (e.g. "Carbon-Sha...168")
-                                            return s_text[:8] + ".." + s_text[-3:]
-                                        return s_text
+                                    G.add_edge(src, tgt, weight=r.probability, color=edge_color)
 
-                                    def plot_complex_network(graph, layout_pos, ax):
-                                        # 1. Dynamic Styling
-                                        d = dict(graph.degree)
-                                        # Scale nodes: Hubs get bigger, leaves get smaller
-                                        node_sizes = [v * 80 + 150 for v in d.values()]
-                                        node_colors = [data.get('color', '#888888') for _, data in graph.nodes(data=True)]
-                                        
-                                        # 2. Draw Edges (Curved & Transparent)
-                                        nx.draw_networkx_edges(
-                                            graph, layout_pos, ax=ax, 
-                                            node_size=node_sizes, 
-                                            arrowstyle='-|>', arrowsize=10, 
-                                            edge_color='#555555', width=1.0, alpha=0.4, # High transparency helps overlap
-                                            connectionstyle="arc3,rad=0.15"
-                                        )
-                                        
-                                        # 3. Draw Nodes (High Contrast Borders)
-                                        nx.draw_networkx_nodes(
-                                            graph, layout_pos, ax=ax, 
-                                            node_size=node_sizes, 
-                                            node_color=node_colors, 
-                                            edgecolors='white', linewidths=1.0
-                                        )
-                                        
-                                        # 4. Draw Smart Labels
-                                        labels = {}
-                                        for n, data in graph.nodes(data=True):
-                                            if data.get('type') == 'action':
-                                                # Actions: "GROW\n(Target)" -> "GROW\n(Targ..)"
-                                                raw_label = data.get('label', n)
-                                                action, param = raw_label.split('\n')
-                                                labels[n] = f"{action}\n{shorten_label(param.strip('()'), 8)}"
-                                            else:
-                                                # Components: Shorten drastically
-                                                labels[n] = shorten_label(n)
-                                                
-                                        nx.draw_networkx_labels(
-                                            graph, layout_pos, ax=ax, labels=labels,
-                                            font_size=5, font_family='sans-serif', font_weight='bold',
-                                            bbox=dict(facecolor='white', edgecolor='none', alpha=0.6, boxstyle='round,pad=0.1')
-                                        )
-                                        ax.axis('off')
-
-                                    # --- RENDER PLOTS ---
-                                    # Calculate dynamic spacing factor (k)
-                                    # More nodes = spread them out more (higher k usually tightens, but here we normalize figure size)
-                                    n_nodes = len(G.nodes())
-                                    optimal_k = 5.0 / math.sqrt(n_nodes) if n_nodes > 0 else 1.0
+                                # --- 2. THE NEON RENDERER (Fixed Visibility) ---
+                                # --- 2. THE NEON RENDERER (V3.0: SYNAPTIC ARCS) ---
+                                # --- 2. THE NEON RENDERER (V3.1: MINIMALIST HUD) ---
+                                # --- 2. THE "CLASSIC CLEAN" RENDERER (Exact match to your image) ---
+                                def plot_neon(graph, pos, ax, title):
+                                    # 1. Background: Pure White
+                                    ax.set_facecolor('white') 
                                     
-                                    # 1. Spring (Default)
-                                    st.markdown("**1. Default Spring**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5)) # Wider canvas
-                                        plot_complex_network(G, nx.spring_layout(G, seed=42, k=optimal_k), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 2. Kamada-Kawai
-                                    st.markdown("**2. Kamada-Kawai (Clean Hierarchy)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.kamada_kawai_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except: st.caption("Layout failed.")
-
-                                    # 3. Circular
-                                    st.markdown("**3. Circular (Connectivity)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.circular_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 4. Random
-                                    st.markdown("**4. Random (Control)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.random_layout(G, seed=42), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 5. Spectral
-                                    st.markdown("**5. Spectral (Math Clusters)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spectral_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except: st.caption("Layout failed.")
-
-                                    # 6. Shell
-                                    st.markdown("**6. Shell (Rings)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.shell_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
+                                    # 2. PREPARE DATA
+                                    edges = graph.edges(data=True)
+                                    # Edges are dark grey/black for high contrast
+                                    edge_colors = ['#404040' for _ in edges]
                                     
-                                    # 7. Spiral
-                                    st.markdown("**7. Spiral (Sequence)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spiral_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
+                                    # 3. DRAW EDGES
+                                    nx.draw_networkx_edges(
+                                        graph, pos, ax=ax, 
+                                        edge_color=edge_colors, 
+                                        width=1.2, 
+                                        alpha=0.7, 
+                                        arrows=True,
+                                        arrowsize=12, 
+                                        node_size=600 # Padding so arrows don't touch the text center
+                                    )
+                                    
+                                    # 4. NODES
+                                    # Use the component's actual color, or defaults
+                                    node_colors = [graph.nodes[n].get('color', '#FFD700') for n in graph.nodes()]
+                                    
+                                    # Make nodes LARGE and SOLID (No transparency)
+                                    base_sizes = [graph.nodes[n].get('size', 10) for n in graph.nodes()]
+                                    final_sizes = [s * 45 for s in base_sizes] # Big readable bubbles
+                                    
+                                    nx.draw_networkx_nodes(
+                                        graph, pos, ax=ax, 
+                                        node_size=final_sizes, 
+                                        node_color=node_colors, 
+                                        alpha=1.0, # 100% Solid
+                                        linewidths=1.0, 
+                                        edgecolors='black' # Thin black border around nodes
+                                    )
+                                    
+                                    # 5. LABELS
+                                    labels = {}
+                                    for n in graph.nodes():
+                                        # Clean up the name for display
+                                        raw_name = str(n)
+                                        # Remove ID numbers (e.g. "Struct_82f4" -> "Struct")
+                                        clean_name = raw_name.split('_')[0]
+                                        # Wrap text if it has dashes
+                                        if "-" in clean_name:
+                                            clean_name = clean_name.replace("-", "\n", 1)
+                                        labels[n] = clean_name
 
-                                    # 8. Planar
-                                    st.markdown("**8. Planar (Complexity Test)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.planar_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except: st.caption("Graph is non-planar (Too Complex).")
+                                    # Draw BLACK text (Standard Font)
+                                    nx.draw_networkx_labels(
+                                        graph, pos, ax=ax, 
+                                        labels=labels, 
+                                        font_size=9, 
+                                        font_color='black', 
+                                        font_weight='normal', # Normal weight reads better on white
+                                        font_family='sans-serif'
+                                    )
+                                    
+                                    # Title Style (Simple Black)
+                                    ax.set_title(title, color='black', fontsize=11, loc='center')
+                                    ax.axis('off')
 
-                                    # 9. Tight Spring
-                                    st.markdown("**9. Tight Spring (Clusters)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spring_layout(G, k=optimal_k*0.5, seed=42), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
+                                # --- 3. LAYOUTS ---
+                                import math
+                                k_val = 0.5
+                                layouts = [
+                                    ("1. Atomic (Spring)", nx.spring_layout(G, seed=999, k=k_val)),
+                                    ("2. Energy (Kamada)", nx.kamada_kawai_layout(G)),
+                                    ("3. Ring (Circular)", nx.circular_layout(G)),
+                                    ("4. Chaos (Random)", nx.random_layout(G)),
+                                    ("5. Spectral (Math)", nx.spectral_layout(G)),
+                                    ("6. Orbit (Shell)", nx.shell_layout(G)),
+                                    ("7. DNA (Spiral)", nx.spiral_layout(G)),
+                                    ("8. Core (Dense)", nx.spring_layout(G, k=0.1)),
+                                    ("9. Nebula (Loose)", nx.spring_layout(G, k=2.0)),
+                                    ("10. Target (Radial)", nx.shell_layout(G)), 
+                                    ("11. Layers (Multipartite)", nx.spring_layout(G, iterations=10)),
+                                    ("12. Deep (Iterative)", nx.spring_layout(G, iterations=200)),
+                                    ("13. Grid (Spectral)", nx.spectral_layout(G, weight='weight')),
+                                    ("14. Flow (Spring)", nx.spring_layout(G)),
+                                    ("15. Star (Center)", nx.spring_layout(G, center=(0,0))),
+                                    ("16. Alt Reality (Seed 999)", nx.spring_layout(G, seed=999))
+                                ]
 
-                                    # 10. Loose Spring
-                                    st.markdown("**10. Loose Spring (Untangled)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spring_layout(G, k=optimal_k*2.0, seed=42), ax)
+                                # Render 4x4 Grid
+                                for idx, (title, pos) in enumerate(layouts):
+                                    if idx % 4 == 0: cols = st.columns(4)
+                                    with cols[idx % 4]:
+                                        fig, ax = plt.subplots(figsize=(3, 3), facecolor='#050505')
+                                        plot_neon(G, pos, ax, title)
                                         st.pyplot(fig)
                                         plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 11. Dual-Shell
-                                    st.markdown("**11. Dual-Shell (Logic Separation)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        comp_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'component']
-                                        act_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'action']
-                                        other_nodes = [n for n, d in G.nodes(data=True) if d.get('type') not in ['component', 'action']]
-                                        plot_complex_network(G, nx.shell_layout(G, nlist=[comp_nodes, act_nodes + other_nodes]), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 12. Settled Spring
-                                    st.markdown("**12. Settled Spring (Stable)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spring_layout(G, iterations=300, seed=42, k=optimal_k), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
-
-                                    # 13. Hierarchical Top-Down
-                                    st.markdown("**13. Hierarchical (Flow)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        pos_13 = nx.nx_pydot.graphviz_layout(G, prog='dot')
-                                        plot_complex_network(G, pos_13, ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception:
-                                        st.caption("Using Fallback (Shell)")
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.shell_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-
-                                    # 14. Hierarchical Radial
-                                    st.markdown("**14. Hierarchical (Radial)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        pos_14 = nx.nx_pydot.graphviz_layout(G, prog='twopi')
-                                        plot_complex_network(G, pos_14, ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception:
-                                        st.caption("Using Fallback (Kamada-Kawai)")
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.kamada_kawai_layout(G), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-
-                                    # 15. Force-Directed (NEATO)
-                                    st.markdown("**15. Force-Directed (NEATO)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        pos_15 = nx.nx_pydot.graphviz_layout(G, prog='neato')
-                                        plot_complex_network(G, pos_15, ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception:
-                                        st.caption("Using Fallback (Spring)")
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spring_layout(G, seed=123, k=optimal_k), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-
-                                    # 16. Spring Alternate
-                                    st.markdown("**16. Spring (Alt Reality)**")
-                                    try:
-                                        fig, ax = plt.subplots(figsize=(6, 5))
-                                        plot_complex_network(G, nx.spring_layout(G, seed=99, k=optimal_k), ax)
-                                        st.pyplot(fig)
-                                        plt.close(fig)
-                                    except Exception as e: st.caption(f"Error: {e}")
 
                                 if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_{i}"):
                                     st.session_state.loaded_specimen_networks.remove(i)
