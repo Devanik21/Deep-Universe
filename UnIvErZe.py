@@ -2658,12 +2658,15 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
 # ========================================================
 # NEW: 3D NEURAL TOPOGRAPHY (SCI-FI VISUALIZATION)
 # ========================================================
+# ========================================================
+# UPGRADED: 3D "CYBERPUNK HOLOMAP" NEURAL TOPOGRAPHY
+# ========================================================
 def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
     """
-    Sci-Fi 3D Visualization of the GRN.
+    Cyberpunk 3D Visualization of the GRN.
     - Uses 3D Force-Directed Layout
-    - 'Neon' edges with dynamic transparency
-    - 'Neural Halo' glow effects
+    - Enhanced 'Neon' edges and 'Neural Halo'
+    - 'HUD' text style with automatic label shortening
     """
     # 1. Build the Graph Structure (Same logic as 2D)
     G = nx.DiGraph()
@@ -2704,11 +2707,11 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
         G.add_edge(source_name, target_name, weight=rule.probability, type=edge_type)
 
     # 2. Generate 3D Positions
-    # Use spring layout in 3D space
     try:
-        pos = nx.spring_layout(G, dim=3, seed=42, k=1.5/np.sqrt(len(G.nodes()) or 1))
+        # Reduced k for tighter, more complex clusters
+        pos = nx.spring_layout(G, dim=3, seed=42, k=1.0/np.sqrt(len(G.nodes()) or 1), iterations=100) 
     except:
-        return go.Figure() # Fail safe
+        return go.Figure()
 
     # --- 3. RENDER EDGES (The Neural Web) ---
     edge_traces = []
@@ -2718,16 +2721,15 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
         x0, y0, z0 = pos[u]
         x1, y1, z1 = pos[v]
         
-        # Dynamic Opacity based on weight
         weight = data.get('weight', 0.5)
-        alpha = max(0.1, weight * 0.6)
+        # Increased alpha for neon visibility
+        alpha = max(0.15, weight * 0.7) 
         
-        # Neon Palette
         conn_type = data.get('type', 'modulatory')
         if conn_type == 'excitatory':
-            edge_color = f'rgba(0, 255, 200, {alpha})' # Cyan
+            edge_color = f'rgba(0, 255, 200, {alpha})' # Bright Cyan
         elif conn_type == 'inhibitory':
-            edge_color = f'rgba(255, 0, 100, {alpha})' # Hot Pink
+            edge_color = f'rgba(255, 50, 80, {alpha})' # Hot Pink/Red
         else:
             edge_color = f'rgba(100, 100, 255, {alpha})' # Electric Blue
 
@@ -2745,7 +2747,7 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
     node_sizes = []
     node_symbols = []
     node_texts = []
-    node_labels = [] 
+    node_labels = [] # Visible labels
     
     # Halo Data
     halo_sizes = []
@@ -2770,20 +2772,28 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
         
         node_texts.append(f"<b>{node}</b><br>{n_type}<br>{data.get('desc','')}")
 
-        # Shape Coding
+        # --- SMART LABELING (Cyber-HUD) ---
+        # 1. Shorten the text
+        short_label = str(node)
+        if "-" in short_label:
+            short_label = short_label.split("-")[-1] 
+        if len(short_label) > 10: 
+            short_label = short_label[:8] + ".."
+            
+        # 2. Shape Coding
         if n_type == 'Sensor': 
             node_symbols.append('diamond')
-            node_labels.append(f"👁️ {node}")
+            node_labels.append(f"👁️ {short_label}")
         elif n_type == 'Abstract':
             node_symbols.append('square')
-            node_labels.append(f"⚡ {node}")
+            node_labels.append(f"⚡ {short_label}")
+        elif size > 15: # Only label core components if big enough (size threshold increased)
+            node_symbols.append('circle')
+            node_labels.append(short_label) 
         else:
             node_symbols.append('circle')
-            # Only label big components to reduce clutter
-            if size > 8:
-                node_labels.append(node)
-            else:
-                node_labels.append("")
+            # Hide small node labels to prevent 3D clutter
+            node_labels.append("") 
 
     # Trace: Neural Halo (Glow)
     halo_trace = go.Scatter3d(
@@ -2792,7 +2802,7 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
         marker=dict(
             size=halo_sizes,
             color=halo_colors,
-            opacity=0.15,
+            opacity=0.2,
             symbol=node_symbols
         ),
         hoverinfo='none',
@@ -2805,7 +2815,12 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
         mode='markers+text',
         text=node_labels,
         textposition="top center",
-        textfont=dict(color="white", size=10),
+        # CYBERPUNK FONT SETTINGS
+        textfont=dict(
+            family="Courier New", # Monospace looks techy
+            size=9, 
+            color='rgba(0, 255, 200, 0.9)' # Bright Cyan/Teal
+        ), 
         hovertext=node_texts,
         hoverinfo='text',
         marker=dict(
@@ -2821,24 +2836,26 @@ def visualize_grn_3d_interactive(genotype: Genotype) -> go.Figure:
     fig = go.Figure(data=edge_traces + [halo_trace, node_trace])
     fig.update_layout(
         title=dict(
-            text=f"<b>Holographic Neural Map</b> | Nodes: {len(G.nodes())}",
-            font=dict(size=14, color="rgba(200,200,200,0.8)"),
-            x=0.5, y=0.95
+            # CYBERPUNK TITLE
+            text=f"<b>HOLOMAP: NEURAL ARCHITECTURE</b> <span style='font-size:12px;color:#FF0066'>// NODES: {len(G.nodes())} //</span>", 
+            font=dict(size=16, color="#00ccff", family="Courier New"), # Neon blue/cyan
+            x=0.05, y=0.95 # Left-aligned like a HUD overlay
         ),
         showlegend=False,
-        paper_bgcolor='rgba(0,0,0,0)', # Transparent for Streamlit dark mode
+        paper_bgcolor='rgba(0,0,0,0)',
         scene=dict(
             xaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
             yaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
             zaxis=dict(visible=False, showgrid=False, zeroline=False, backgroundcolor='rgba(0,0,0,0)'),
-            bgcolor='rgba(0,0,0,0)'
+            bgcolor='rgba(0,0,0,0)',
+            # Set a nice default camera view
+            camera=dict(eye=dict(x=1.8, y=1.8, z=1.8))
         ),
         height=600,
         margin=dict(l=0, r=0, t=40, b=0)
     )
     
     return fig
-
 # --- PASTE THIS NEW CODE BLOCK HERE ---
 
 def visualize_phenotype_mri(phenotype: Phenotype, grid: UniverseGrid) -> go.Figure:
