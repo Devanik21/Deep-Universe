@@ -3860,6 +3860,9 @@ def main():
         st.session_state.loaded_specimen_scans = set()
     if 'loaded_specimen_networks' not in st.session_state:
         st.session_state.loaded_specimen_networks = set()
+
+    if 'loaded_legacy_grn' not in st.session_state:
+        st.session_state.loaded_legacy_grn = set()
     
     # --- Password Protection (Reused from GENEVO) ---
     # --- Password Protection (Using Streamlit Secrets) ---
@@ -6008,9 +6011,195 @@ def main():
 
                         st.markdown("---")
 
+
+                        # ==========================================
+                        # PART 2: LEGACY WHITE-PAPER ANALYSIS (16 PLOTS)
+                        # ==========================================
+                        st.markdown("---")
+                        
+                        # 1. Lazy Load Button
+                        if i not in st.session_state.loaded_legacy_grn:
+                            st.caption("View the organism's logic using the classic academic 'White-Paper' visualizations.")
+                            if st.button(f"📄 Load Legacy White-Paper Analysis (16 Plots)", key=f"btn_load_white_{i}"):
+                                st.session_state.loaded_legacy_grn.add(i)
+                                st.rerun()
+                        else:
+                            st.markdown("#### 📄 White-Paper GRN Analysis")
+                            st.caption("16 distinct topological lenses (Exact Reference Implementation).")
+
+                            # --- 2. Construct The Graph (Exact Logic from Source) ---
+                            G = nx.DiGraph()
+                            # Add Component Nodes (Genes)
+                            for comp_name, comp_gene in specimen.component_genes.items():
+                                G.add_node(comp_name, type='component', color=comp_gene.color, shape='o')
+                            
+                            # Add Rule/Action Nodes (Logic Gates)
+                            for rule_idx, rule in enumerate(specimen.rule_genes):
+                                # Action Node
+                                action_label = f"{rule.action_type}\n({rule.action_param})"
+                                action_id = f"R{rule_idx}:{rule.action_type}"
+                                G.add_node(action_id, label=action_label, type='action', color='#FFB347', shape='s')
+                                
+                                # Sensor Edge (Component -> Rule)
+                                source_node = list(specimen.component_genes.keys())[0] # Fallback
+                                if rule.conditions:
+                                    type_cond = next((c for c in rule.conditions if c['source'] == 'self_type'), None)
+                                    if type_cond and type_cond['target_value'] in G.nodes():
+                                        source_node = type_cond['target_value']
+                                
+                                G.add_edge(source_node, action_id, weight=1, type='sense')
+                                
+                                # Actuator Edge (Rule -> Target)
+                                target = rule.action_param
+                                if target in specimen.component_genes:
+                                    G.add_edge(action_id, target, weight=2, type='act')
+                                else:
+                                    # Abstract target (e.g. 'NEIGHBORS', 'pulse_A')
+                                    if target not in G.nodes():
+                                        G.add_node(target, type='abstract', color='#DDDDDD', shape='^')
+                                    G.add_edge(action_id, target, weight=2, type='act')
+
+                            if not G.nodes:
+                                st.warning("Empty Graph.")
+                            else:
+                                # --- 3. Helper Functions (Exact Copies) ---
+                                import math
+                                
+                                def shorten_label(text, max_len=15):
+                                    """Smartly truncates biological names for readability."""
+                                    s_text = str(text)
+                                    # Remove common prefixes to save space
+                                    for prefix in ['Proto-', 'Neuro-', 'Causal-', 'Pseudo-', 'Spectral-', 'Quantum-']:
+                                        if s_text.startswith(prefix):
+                                            s_text = s_text.replace(prefix, "")
+                                    
+                                    # Truncate if still too long
+                                    if len(s_text) > max_len:
+                                        # Keep start and end (e.g. "Carbon-Sha...168")
+                                        return s_text[:8] + ".." + s_text[-3:]
+                                    return s_text
+
+                                def plot_complex_network(graph, layout_pos, ax):
+                                    # 1. Dynamic Styling
+                                    d = dict(graph.degree)
+                                    # Scale nodes: Hubs get bigger, leaves get smaller
+                                    node_sizes = [v * 80 + 150 for v in d.values()]
+                                    node_colors = [data.get('color', '#888888') for _, data in graph.nodes(data=True)]
+                                    
+                                    # 2. Draw Edges (Curved & Transparent)
+                                    nx.draw_networkx_edges(
+                                        graph, layout_pos, ax=ax, 
+                                        node_size=node_sizes, 
+                                        arrowstyle='-|>', arrowsize=10, 
+                                        edge_color='#555555', width=1.0, alpha=0.4, # High transparency helps overlap
+                                        connectionstyle="arc3,rad=0.15"
+                                    )
+                                    
+                                    # 3. Draw Nodes (High Contrast Borders)
+                                    nx.draw_networkx_nodes(
+                                        graph, layout_pos, ax=ax, 
+                                        node_size=node_sizes, 
+                                        node_color=node_colors, 
+                                        edgecolors='white', linewidths=1.0
+                                    )
+                                    
+                                    # 4. Draw Smart Labels (The Exact White Styling)
+                                    labels = {}
+                                    for n, data in graph.nodes(data=True):
+                                        if data.get('type') == 'action':
+                                            # Actions: "GROW\n(Target)" -> "GROW\n(Targ..)"
+                                            raw_label = data.get('label', n)
+                                            action, param = raw_label.split('\n')
+                                            labels[n] = f"{action}\n{shorten_label(param.strip('()'), 8)}"
+                                        else:
+                                            # Components: Shorten drastically
+                                            labels[n] = shorten_label(n)
+                                            
+                                    nx.draw_networkx_labels(
+                                        graph, layout_pos, ax=ax, labels=labels,
+                                        font_size=5, font_family='sans-serif', font_weight='bold',
+                                        # EXACT WHITE BOX STYLING FROM SOURCE
+                                        bbox=dict(facecolor='white', edgecolor='none', alpha=0.6, boxstyle='round,pad=0.1')
+                                    )
+                                    ax.axis('off')
+
+                                # --- 4. Render the 16 Plots ---
+                                # Calculate dynamic spacing factor (k)
+                                n_nodes = len(G.nodes())
+                                optimal_k = 5.0 / math.sqrt(n_nodes) if n_nodes > 0 else 1.0
+                                
+                                # We define the 16 layouts exactly as they were in the source
+                                layouts_to_plot = [
+                                    ("1. Default Spring", nx.spring_layout(G, seed=42, k=optimal_k)),
+                                    ("2. Kamada-Kawai", nx.kamada_kawai_layout(G)),
+                                    ("3. Circular", nx.circular_layout(G)),
+                                    ("4. Random", nx.random_layout(G, seed=42)),
+                                    ("5. Spectral", nx.spectral_layout(G)),
+                                    ("6. Shell", nx.shell_layout(G)),
+                                    ("7. Spiral", nx.spiral_layout(G)),
+                                    ("8. Planar", None), # Special handling needed usually, handled in try/except below
+                                    ("9. Tight Spring", nx.spring_layout(G, k=optimal_k*0.5, seed=42)),
+                                    ("10. Loose Spring", nx.spring_layout(G, k=optimal_k*2.0, seed=42)),
+                                    ("11. Dual-Shell", None), # Custom logic needed
+                                    ("12. Settled Spring", nx.spring_layout(G, iterations=300, seed=42, k=optimal_k)),
+                                    ("13. Hierarchical (Dot)", None), # Graphviz needed
+                                    ("14. Hierarchical (Radial)", None), # Graphviz needed
+                                    ("15. Force-Directed (Neato)", None), # Graphviz needed
+                                    ("16. Spring Alternate", nx.spring_layout(G, seed=99, k=optimal_k))
+                                ]
+
+                                # Render in 2 Columns
+                                cols = st.columns(2)
+                                
+                                # Manual Logic for the specific custom ones (11, 8, 13-15) to match source
+                                for idx, (title, pos) in enumerate(layouts_to_plot):
+                                    with cols[idx % 2]:
+                                        st.caption(f"**{title}**")
+                                        try:
+                                            fig, ax = plt.subplots(figsize=(6, 5))
+                                            
+                                            # Special Case Handling to match source logic exactly
+                                            final_pos = pos
+                                            
+                                            if "Planar" in title:
+                                                try: final_pos = nx.planar_layout(G)
+                                                except: 
+                                                    st.caption("(Graph is non-planar, skipped)")
+                                                    plt.close(fig)
+                                                    continue
+                                            
+                                            elif "Dual-Shell" in title:
+                                                comp_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'component']
+                                                act_nodes = [n for n, d in G.nodes(data=True) if d.get('type') == 'action']
+                                                other_nodes = [n for n, d in G.nodes(data=True) if d.get('type') not in ['component', 'action']]
+                                                final_pos = nx.shell_layout(G, nlist=[comp_nodes, act_nodes + other_nodes])
+                                            
+                                            elif "Hierarchical (Dot)" in title:
+                                                try: final_pos = nx.nx_pydot.graphviz_layout(G, prog='dot')
+                                                except: final_pos = nx.shell_layout(G) # Fallback
+                                            
+                                            elif "Hierarchical (Radial)" in title:
+                                                try: final_pos = nx.nx_pydot.graphviz_layout(G, prog='twopi')
+                                                except: final_pos = nx.kamada_kawai_layout(G) # Fallback
+                                            
+                                            elif "Neato" in title:
+                                                try: final_pos = nx.nx_pydot.graphviz_layout(G, prog='neato')
+                                                except: final_pos = nx.spring_layout(G, seed=123, k=optimal_k) # Fallback
+
+                                            if final_pos:
+                                                plot_complex_network(G, final_pos, ax)
+                                                st.pyplot(fig)
+                                            plt.close(fig)
+                                        except Exception as e:
+                                            st.caption(f"Error rendering {title}: {e}")
+
+                            if st.button("❌ Close White-Paper Analysis", key=f"btn_hide_white_{i}"):
+                                st.session_state.loaded_legacy_grn.remove(i)
+                                st.rerun()
+
                         # ==========================================
                         # ==========================================
-                        # PART 2: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
+                        # PART 3: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
                         # ==========================================
                         if i in st.session_state.loaded_specimen_scans:
                             if i not in st.session_state.loaded_specimen_networks:
