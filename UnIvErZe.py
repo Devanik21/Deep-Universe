@@ -2433,6 +2433,152 @@ def apply_physics_drift(settings: Dict):
 
 
 
+# ========================================================
+# NEW: BIO-DIGITAL CORTEX (CYAN/GREEN WEB)
+# ========================================================
+def visualize_neuro_web_cyan(genotype: Genotype, seed: int = 42) -> go.Figure:
+    """
+    A distinct, high-density 'Neural Web' visualization.
+    - Theme: Pure Cyan, Teal, and Neon Green.
+    - Layout: Organic 'Brain Slice' (dense center, tendrils).
+    - Style: Glowing nodes, curved synaptic connections.
+    """
+    G = nx.DiGraph()
+    
+    # --- 1. BUILD GRAPH ---
+    for comp in genotype.component_genes.values():
+        # Strict Bio-Digital Palette
+        if comp.motility > 0: color = '#00FF7F'   # Spring Green (Motor)
+        elif comp.sense_light > 0: color = '#00FFFF' # Aqua (Sensor)
+        elif comp.compute > 0: color = '#20B2AA'     # Light Sea Green (Logic)
+        elif comp.offense > 0: color = '#3CB371'     # Medium Sea Green (Weapon)
+        else: color = '#008B8B'                      # Dark Cyan (Structure)
+
+        # Size heavily weighted by complexity/mass
+        G.add_node(
+            comp.name,
+            size=8 + (comp.mass * 5.0),
+            color=color,
+            hover_text=f"<b>{comp.name}</b><br>Type: {comp.base_kingdom}"
+        )
+
+    for rule in genotype.rule_genes:
+        if rule.is_disabled: continue
+        
+        # Resolve Target
+        target_name = rule.action_param
+        if target_name in genotype.component_genes:
+            target_name = genotype.component_genes[target_name].name
+        else:
+            if target_name not in G:
+                G.add_node(target_name, size=4, color='#2F4F4F', hover_text="Abstract Target")
+
+        # Resolve Source
+        source_name = rule.conditions[0]['source'] if rule.conditions else "Input"
+        if source_name not in G:
+            G.add_node(source_name, size=4, color='#AFEEEE', hover_text="Sensory Input") # Pale Turquoise
+
+        # Edge Color: Cyan for signals, Green for growth
+        edge_color = 'rgba(0, 255, 127, 0.3)' if 'GROW' in rule.action_type else 'rgba(0, 255, 255, 0.2)'
+        G.add_edge(source_name, target_name, color=edge_color)
+
+    # --- 2. LAYOUT (Brain Slice Physics) ---
+    # We use Kamada-Kawai for a more "organic, tissue-like" spread
+    try:
+        pos = nx.kamada_kawai_layout(G)
+    except:
+        pos = nx.spring_layout(G, seed=seed, k=0.3)
+
+    fig = go.Figure()
+
+    # --- 3. RENDER SYNAPSES (Curved Web) ---
+    for i, (u, v, data) in enumerate(G.edges(data=True)):
+        if u not in pos or v not in pos: continue
+        x0, y0 = pos[u]
+        x1, y1 = pos[v]
+        
+        # Organic curve
+        curve_dir = 0.1 if i % 2 == 0 else -0.1
+        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curve_dir)
+        
+        fig.add_trace(go.Scatter(
+            x=bx, y=by,
+            mode='lines',
+            line=dict(width=0.5, color=data['color']),
+            hoverinfo='none',
+            showlegend=False
+        ))
+
+    # --- 4. RENDER NEURONS (Nodes) ---
+    node_x, node_y = [], []
+    node_colors = []
+    node_sizes = []
+    node_text = []
+    
+    # Glow layers
+    glow_x, glow_y = [], []
+    glow_sizes = []
+    glow_colors = []
+
+    for node, data in G.nodes(data=True):
+        x, y = pos[node]
+        node_x.append(x); node_y.append(y)
+        glow_x.append(x); glow_y.append(y)
+        
+        c = data.get('color', '#00FFFF')
+        s = data.get('size', 6)
+        
+        node_colors.append(c)
+        node_sizes.append(s)
+        node_text.append(data.get('hover_text', node))
+        
+        # Create "Bioluminescent" Glow
+        glow_colors.append(c)
+        glow_sizes.append(s * 4.0) # Large soft glow
+
+    # Trace A: The Glow
+    fig.add_trace(go.Scatter(
+        x=glow_x, y=glow_y,
+        mode='markers',
+        marker=dict(size=glow_sizes, color=glow_colors, opacity=0.15),
+        hoverinfo='none', showlegend=False
+    ))
+
+    # Trace B: The Core
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers',
+        marker=dict(
+            size=node_sizes, 
+            color=node_colors, 
+            line=dict(width=1, color='#E0FFFF'), # Cyan Rim
+            opacity=1.0
+        ),
+        text=node_text,
+        hoverinfo='text',
+        name='Neurons'
+    ))
+
+    # --- 5. LAYOUT ---
+    fig.update_layout(
+        title=dict(
+            text=f"<b>BIO-DIGITAL CORTEX</b> <span style='font-size:12px;color:#00FF7F'>// SYNAPSES: {len(G.edges())} //</span>",
+            font=dict(family="Courier New", size=14, color="#00FFFF"),
+            x=0.05, y=0.95
+        ),
+        showlegend=False,
+        margin=dict(l=10, r=10, t=40, b=10),
+        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+        height=500,
+        plot_bgcolor='#000505', # Deepest Swamp/Cyber Black
+        paper_bgcolor='rgba(0,0,0,0)'
+    )
+    
+    return fig
+
+
+
 def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
     """
     Generates x, y coordinates for a quadratic Bezier curve.
@@ -5739,6 +5885,15 @@ def main():
                                 st.caption("Rotate, zoom, and explore the organism's brain structure in 3D space.")
                                 fig_3d = visualize_grn_3d_interactive(specimen)
                                 st.plotly_chart(fig_3d, width='stretch', key=f"grn_3d_{i}")
+
+                                st.markdown("---")
+                                
+                                # 6. NEW: Bio-Digital Cortex (Web)
+                                st.markdown("**🕸️ Bio-Digital Cortex (Network Density)**")
+                                st.caption("A focused visualization of the organism's synaptic complexity. Cyan represents sensory data; Green represents growth and action.")
+                                fig_web = visualize_neuro_web_cyan(specimen)
+                                st.plotly_chart(fig_web, width='stretch', key=f"grn_web_{i}")
+                                # <--- END INSERT ---
                                 
                                 # 4. Objectives
                                 if specimen.objective_weights:
