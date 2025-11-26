@@ -6073,7 +6073,7 @@ def main():
                                         connectionstyle="arc3,rad=0.1",
                                         arrows=True,
                                         arrowstyle='-|>', 
-                                        arrowsize=5
+                                        arrowsize=7
                                     )
                                     
                                     # 4. NODES (NEON HALOS)
@@ -6127,7 +6127,7 @@ def main():
                                         text_items = nx.draw_networkx_labels(
                                             graph, pos, ax=ax, 
                                             labels=labels, 
-                                            font_size=4, # Tiny Tech Font
+                                            font_size=6, # Tiny Tech Font
                                             font_color='#00FF00', 
                                             font_family='monospace', 
                                             font_weight='bold'
@@ -6144,7 +6144,7 @@ def main():
                                 import math
                                 k_val = 0.5
                                 layouts = [
-                                    ("1. Atomic (Spring)", nx.spring_layout(G, seed=42, k=k_val)),
+                                    ("1. Atomic (Spring)", nx.spring_layout(G, seed=-1, k=k_val)),
                                     ("2. Energy (Kamada)", nx.kamada_kawai_layout(G)),
                                     ("3. Ring (Circular)", nx.circular_layout(G)),
                                     ("4. Chaos (Random)", nx.random_layout(G)),
@@ -6159,7 +6159,7 @@ def main():
                                     ("13. Grid (Spectral)", nx.spectral_layout(G, weight='weight')),
                                     ("14. Flow (Spring)", nx.spring_layout(G)),
                                     ("15. Star (Center)", nx.spring_layout(G, center=(0,0))),
-                                    ("16. Alt Reality (Seed 99)", nx.spring_layout(G, seed=99))
+                                    ("16. Alt Reality (Seed 99)", nx.spring_layout(G, seed=-1))
                                 ]
 
                                 # Render 4x4 Grid
