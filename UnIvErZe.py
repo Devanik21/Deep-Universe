@@ -6011,6 +6011,9 @@ def main():
                         # ==========================================
                         # PART 2: DEEP NETWORK ANALYSIS (HIGH-FIDELITY & ROBUST)
                         # ==========================================
+                        # ==========================================
+                        # PART 2: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
+                        # ==========================================
                         if i in st.session_state.loaded_specimen_scans:
                             if i not in st.session_state.loaded_specimen_networks:
                                 st.info("Deep Network Analysis contains 16 computationally intensive graph layouts.")
@@ -6018,163 +6021,83 @@ def main():
                                     st.session_state.loaded_specimen_networks.add(i)
                                     st.rerun()
                             else:
-                                st.markdown("#### 🕸️ GRN Encyclopedia")
-                                st.caption("Visualizing the 'Brain' of the organism using 16 distinct topological lenses.")
+                                st.markdown("#### 🕸️ GRN Encyclopedia (Neon-Grid)")
                                 
-                                # --- 1. Construct Rich Graph Object ---
+                                # --- 1. Construct Graph ---
                                 G = nx.DiGraph()
+                                for c in specimen.component_genes.values():
+                                    # Assign Neon Colors based on function
+                                    col = '#00FFFF' # Cyan (Sensor)
+                                    if c.motility > 0: col = '#00FF00' # Green (Motor)
+                                    elif c.compute > 0: col = '#008080' # Teal (Processor)
+                                    elif c.offense > 0: col = '#FF00FF' # Magenta (Weapon)
+                                    G.add_node(c.name, size=5+(c.mass*5), color=col)
+                                    
+                                for r in specimen.rule_genes:
+                                    if r.is_disabled: continue
+                                    tgt = specimen.component_genes[r.action_param].name if r.action_param in specimen.component_genes else str(r.action_param)
+                                    if tgt not in G: G.add_node(tgt, size=3, color='#555555')
+                                    src = r.conditions[0]['source'] if r.conditions else "Input"
+                                    if src not in G: G.add_node(src, size=3, color='#FFFFFF')
+                                    G.add_edge(src, tgt, weight=r.probability)
+
+                                # --- 2. THE NEON RENDERER ---
+                                def plot_neon(graph, pos, ax, title):
+                                    # Dark Void Background
+                                    ax.set_facecolor('#050505')
+                                    
+                                    # Draw Edges (Ghostly & Thin)
+                                    nx.draw_networkx_edges(graph, pos, ax=ax, edge_color='rgba(0, 255, 255, 0.1)', width=0.5, alpha=0.2, arrows=False)
+                                    
+                                    # Draw Nodes (Glowing Dots)
+                                    sizes = [G.nodes[n].get('size', 5)*2 for n in graph.nodes()]
+                                    colors = [G.nodes[n].get('color', '#FFF') for n in graph.nodes()]
+                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=sizes, node_color=colors, alpha=0.9, linewidths=0)
+                                    
+                                    # SMART LABELING: Only label HUBS (Top 10% by connections)
+                                    degrees = dict(graph.degree())
+                                    # Sort nodes by importance
+                                    top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.15)]
+                                    labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
+                                    
+                                    text = nx.draw_networkx_labels(graph, pos, ax=ax, labels=labels, font_size=5, font_color='#E0E0E0', font_family='monospace')
+                                    
+                                    # Title Style
+                                    ax.set_title(title, color='#00FF00', fontsize=8, loc='left', fontfamily='monospace')
+                                    ax.axis('off')
+
+                                # --- 3. LAYOUTS ---
+                                import math
+                                k_val = 0.5  # Spacing factor
                                 
-                                # Add Component Nodes (Genes)
-                                for comp_name, comp_gene in specimen.component_genes.items():
-                                    G.add_node(comp_name, type='component', color=comp_gene.color, shape='o')
-                                
-                                # Add Rule/Action Nodes (Logic Gates)
-                                for rule_idx, rule in enumerate(specimen.rule_genes):
-                                    # Action Node
-                                    # FIX: Replaced ':' with '_' to prevent Graphviz parsing errors
-                                    action_label = f"{rule.action_type}\n({rule.action_param})"
-                                    action_id = f"R{rule_idx}_{rule.action_type}" 
-                                    G.add_node(action_id, label=action_label, type='action', color='#FFB347', shape='s')
-                                    
-                                    # Sensor Edge (Component -> Rule)
-                                    source_node = list(specimen.component_genes.keys())[0] # Fallback
-                                    if rule.conditions:
-                                        type_cond = next((c for c in rule.conditions if c['source'] == 'self_type'), None)
-                                        if type_cond and type_cond['target_value'] in G.nodes():
-                                            source_node = type_cond['target_value']
-                                    
-                                    G.add_edge(source_node, action_id, weight=1, type='sense')
-                                    
-                                    # Actuator Edge (Rule -> Target)
-                                    target = rule.action_param
-                                    if target in specimen.component_genes:
-                                        G.add_edge(action_id, target, weight=2, type='act')
-                                    else:
-                                        # Abstract target (e.g. 'NEIGHBORS', 'pulse_A')
-                                        if target not in G.nodes():
-                                            G.add_node(target, type='abstract', color='#DDDDDD', shape='^')
-                                        G.add_edge(action_id, target, weight=2, type='act')
+                                # Safe layouts (No crashes)
+                                layouts = [
+                                    ("1. Atomic (Spring)", nx.spring_layout(G, seed=42, k=k_val)),
+                                    ("2. Energy (Kamada)", nx.kamada_kawai_layout(G)),
+                                    ("3. Ring (Circular)", nx.circular_layout(G)),
+                                    ("4. Chaos (Random)", nx.random_layout(G)),
+                                    ("5. Spectral (Math)", nx.spectral_layout(G)),
+                                    ("6. Orbit (Shell)", nx.shell_layout(G)),
+                                    ("7. DNA (Spiral)", nx.spiral_layout(G)),
+                                    ("8. Core (Dense)", nx.spring_layout(G, k=0.1)),
+                                    ("9. Nebula (Loose)", nx.spring_layout(G, k=2.0)),
+                                    ("10. Target (Radial)", nx.shell_layout(G)), # Fallback for radial
+                                    ("11. Layers (Multipartite)", nx.spring_layout(G, iterations=10)),
+                                    ("12. Deep (Iterative)", nx.spring_layout(G, iterations=200)),
+                                    ("13. Grid (Spectral)", nx.spectral_layout(G, weight='weight')),
+                                    ("14. Flow (Spring Directed)", nx.spring_layout(G, arrows=True)),
+                                    ("15. Star (Center)", nx.spring_layout(G, center=(0,0))),
+                                    ("16. Alt Reality (Seed 99)", nx.spring_layout(G, seed=99))
+                                ]
 
-                                if not G.nodes:
-                                    st.warning("Empty Graph.")
-                                else:
-                                    # --- HELPER: Smart Plotting Function (DARK MODE) ---
-                                    import math
-                                    import matplotlib.patheffects as path_effects
-                                    
-                                    def shorten_label(text, max_len=15):
-                                        s_text = str(text)
-                                        for prefix in ['Proto-', 'Neuro-', 'Causal-', 'Pseudo-', 'Spectral-', 'Quantum-']:
-                                            if s_text.startswith(prefix):
-                                                s_text = s_text.replace(prefix, "")
-                                        if len(s_text) > max_len:
-                                            return s_text[:8] + ".." + s_text[-3:]
-                                        return s_text
-
-                                    def plot_complex_network(graph, layout_pos, ax, title_text=""):
-                                        # 1. Dark Theme Background
-                                        bg_color = '#0E1117' 
-                                        ax.set_facecolor(bg_color)
-                                        ax.figure.set_facecolor(bg_color)
-                                        
-                                        # 2. Dynamic Node Sizing
-                                        d = dict(graph.degree)
-                                        node_sizes = [min(600, max(80, v * 120)) for v in d.values()]
-                                        
-                                        # 3. Draw "Glow" (Nodes)
-                                        nx.draw_networkx_nodes(graph, layout_pos, ax=ax, node_size=[s * 2.2 for s in node_sizes], node_color='#ffffff', alpha=0.08)
-                                        
-                                        # 4. Draw Edges (Colored by Type)
-                                        sense_edges = [(u, v) for u, v, data in graph.edges(data=True) if data.get('type') == 'sense']
-                                        act_edges = [(u, v) for u, v, data in graph.edges(data=True) if data.get('type') == 'act']
-                                        other_edges = [(u, v) for u, v, data in graph.edges(data=True) if data.get('type') not in ['sense', 'act']]
-
-                                        nx.draw_networkx_edges(graph, layout_pos, ax=ax, edgelist=sense_edges, edge_color='#00d4ff', alpha=0.5, width=0.8, arrowstyle='-|>', arrowsize=10, connectionstyle="arc3,rad=0.15")
-                                        nx.draw_networkx_edges(graph, layout_pos, ax=ax, edgelist=act_edges, edge_color='#ffaa00', alpha=0.5, width=1.0, arrowstyle='-|>', arrowsize=12, connectionstyle="arc3,rad=0.15")
-                                        nx.draw_networkx_edges(graph, layout_pos, ax=ax, edgelist=other_edges, edge_color='#555555', alpha=0.3, width=0.5, connectionstyle="arc3,rad=0.1")
-                                        
-                                        # 5. Draw Core Nodes
-                                        node_colors = []
-                                        for n, data in graph.nodes(data=True):
-                                            if data.get('type') == 'action': node_colors.append('#ffaa00')
-                                            elif data.get('type') == 'abstract': node_colors.append('#bd00ff')
-                                            else: node_colors.append(data.get('color', '#888888'))
-
-                                        nx.draw_networkx_nodes(graph, layout_pos, ax=ax, node_size=node_sizes, node_color=node_colors, edgecolors='#ffffff', linewidths=0.8)
-                                        
-                                        # 6. Labels
-                                        labels = {}
-                                        for n, data in graph.nodes(data=True):
-                                            if data.get('type') == 'action':
-                                                raw = data.get('label', n)
-                                                try:
-                                                    act, param = raw.split('\n')
-                                                    labels[n] = f"{act}\n[{shorten_label(param.strip('()'), 8)}]"
-                                                except: labels[n] = raw
-                                            else:
-                                                labels[n] = shorten_label(n)
-                                                
-                                        text_items = nx.draw_networkx_labels(graph, layout_pos, ax=ax, labels=labels, font_size=6, font_family='monospace', font_weight='bold', font_color='#eeeeee')
-                                        for _, t in text_items.items():
-                                            t.set_path_effects([path_effects.withStroke(linewidth=2, foreground=bg_color)])
-                                            
-                                        ax.set_title(title_text, color='#666666', fontsize=8, loc='left', pad=2, fontname='monospace')
-                                        ax.axis('off')
-
-                                    # --- HELPER: Safe Layout Calculator (The Crash Fix) ---
-                                    def safe_graphviz_layout(G, prog, fallback):
-                                        try:
-                                            if hasattr(nx, 'nx_pydot'):
-                                                return nx.nx_pydot.graphviz_layout(G, prog=prog)
-                                            else:
-                                                return fallback
-                                        except Exception:
-                                            # If Graphviz/pydot fails, return the fallback silently
-                                            return fallback
-
-                                    # --- RENDER PLOTS ---
-                                    n_nodes = len(G.nodes())
-                                    optimal_k = 4.0 / math.sqrt(n_nodes) if n_nodes > 0 else 1.0
-                                    
-                                    # Pre-calculate layouts safely
-                                    spring_pos = nx.spring_layout(G, seed=42, k=optimal_k) # Base fallback
-                                    
-                                    layouts = [
-                                        ("1. Default Spring (Physics)", spring_pos),
-                                        ("2. Kamada-Kawai (Energy)", nx.kamada_kawai_layout(G)),
-                                        ("3. Circular (Ring)", nx.circular_layout(G)),
-                                        ("4. Random (Entropy Control)", nx.random_layout(G, seed=42)),
-                                        ("5. Spectral (Eigenvectors)", nx.spectral_layout(G)),
-                                        ("6. Shell (Concentric)", nx.shell_layout(G)),
-                                        ("7. Spiral (Sequence)", nx.spiral_layout(G)),
-                                        ("8. Planar (Topology Test)", nx.planar_layout(G) if nx.check_planarity(G)[0] else nx.spring_layout(G, seed=1)),
-                                        ("9. Dense Core (High Gravity)", nx.spring_layout(G, k=optimal_k*0.3, seed=42)),
-                                        ("10. Expanded Void (Low Gravity)", nx.spring_layout(G, k=optimal_k*2.5, seed=42)),
-                                        ("11. Dual-Shell (Logic Separation)", nx.shell_layout(G, nlist=[[n for n,d in G.nodes(data=True) if d.get('type')=='component'], [n for n in G.nodes() if n not in [n for n,d in G.nodes(data=True) if d.get('type')=='component']]])),
-                                        ("12. Settled State (Iterative)", nx.spring_layout(G, iterations=400, seed=42, k=optimal_k)),
-                                        # Safe Graphviz Calls
-                                        ("13. Hierarchical Flow (Top-Down)", safe_graphviz_layout(G, 'dot', spring_pos)),
-                                        ("14. Radial Burst (Twopi)", safe_graphviz_layout(G, 'twopi', nx.kamada_kawai_layout(G))),
-                                        ("15. Organic Force (Neato)", safe_graphviz_layout(G, 'neato', nx.spring_layout(G, seed=3, k=optimal_k))),
-                                        ("16. Alternate Dimension (Seed 99)", nx.spring_layout(G, seed=99, k=optimal_k))
-                                    ]
-
-                                    # Render grid
-                                    # Render grid
-                                    for idx, (title, pos) in enumerate(layouts):
-                                        # Create new columns every 2 plots for better sizing
-                                        if idx % 2 == 0:
-                                            plot_cols = st.columns(2) # <--- FIXED: Renamed to 'plot_cols'
-                                        
-                                        with plot_cols[idx % 2]:      # <--- FIXED: Use 'plot_cols' here
-                                            try:
-                                                # Dark figure background
-                                                fig, ax = plt.subplots(figsize=(6, 5), facecolor='#0E1117') 
-                                                plot_complex_network(G, pos, ax, title)
-                                                st.pyplot(fig)
-                                                plt.close(fig)
-                                            except Exception as e:
-                                                st.caption(f"Error rendering {title}: {e}")
+                                # Render 4x4 Grid
+                                for idx, (title, pos) in enumerate(layouts):
+                                    if idx % 4 == 0: cols = st.columns(4)
+                                    with cols[idx % 4]:
+                                        fig, ax = plt.subplots(figsize=(3, 3), facecolor='#050505')
+                                        plot_neon(G, pos, ax, title)
+                                        st.pyplot(fig)
+                                        plt.close(fig)
 
                                 if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_{i}"):
                                     st.session_state.loaded_specimen_networks.remove(i)
