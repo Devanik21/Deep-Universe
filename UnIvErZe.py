@@ -6081,11 +6081,11 @@ def main():
                                     ("7. DNA (Spiral)", nx.spiral_layout(G)),
                                     ("8. Core (Dense)", nx.spring_layout(G, k=0.1)),
                                     ("9. Nebula (Loose)", nx.spring_layout(G, k=2.0)),
-                                    ("10. Target (Radial)", nx.shell_layout(G)), # Fallback for radial
+                                    ("10. Target (Radial)", nx.shell_layout(G)), 
                                     ("11. Layers (Multipartite)", nx.spring_layout(G, iterations=10)),
                                     ("12. Deep (Iterative)", nx.spring_layout(G, iterations=200)),
                                     ("13. Grid (Spectral)", nx.spectral_layout(G, weight='weight')),
-                                    ("14. Flow (Spring Directed)", nx.spring_layout(G, arrows=True)),
+                                    ("14. Flow (Spring)", nx.spring_layout(G)), # <--- FIXED: Removed arrows=True
                                     ("15. Star (Center)", nx.spring_layout(G, center=(0,0))),
                                     ("16. Alt Reality (Seed 99)", nx.spring_layout(G, seed=99))
                                 ]
