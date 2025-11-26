@@ -6015,7 +6015,7 @@ def main():
                         # ==========================================
                         # PART 2: LEGACY WHITE-PAPER ANALYSIS (16 PLOTS)
                         # ==========================================
-                        st.markdown("---")
+                        
                         
                         # 1. Lazy Load Button
                         if i not in st.session_state.loaded_legacy_grn:
@@ -6196,6 +6196,8 @@ def main():
                             if st.button("❌ Close White-Paper Analysis", key=f"btn_hide_white_{i}"):
                                 st.session_state.loaded_legacy_grn.remove(i)
                                 st.rerun()
+
+                        st.markdown("---")
 
                         # ==========================================
                         # ==========================================
