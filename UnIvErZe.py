@@ -6051,41 +6051,87 @@ def main():
                                     G.add_edge(src, tgt, weight=r.probability, color=edge_color)
 
                                 # --- 2. THE NEON RENDERER (Fixed Visibility) ---
+                                # --- 2. THE NEON RENDERER (V3.0: SYNAPTIC ARCS) ---
                                 def plot_neon(graph, pos, ax, title):
-                                    # Background: Deep Void
+                                    # 1. Background: Deep Void
                                     ax.set_facecolor('#050505')
                                     
-                                    # EDGES: Separate them by color to draw them distinctly
+                                    # 2. PREPARE DATA
+                                    # Get edge weights to determine line thickness
                                     edges = graph.edges(data=True)
-                                    edge_colors_list = [d.get('color', '#4444FF') for u, v, d in edges]
+                                    weights = [d.get('weight', 0.5) for u, v, d in edges]
+                                    # Scale widths: Stronger rules = Thicker lines (0.5 to 2.0)
+                                    widths = [0.5 + (w * 1.5) for w in weights]
                                     
-                                    # Draw edges with HIGH opacity (0.6) and distinct width
+                                    # Get colors based on type (Growth=Teal, Attack=Pink, Default=Blue)
+                                    edge_colors = [d.get('color', '#4444FF') for u, v, d in edges]
+                                    
+                                    # 3. DRAW EDGES (SYNAPTIC ARCS)
+                                    # use connectionstyle to curve the lines. rad=0.1 gives a gentle organic curve.
                                     nx.draw_networkx_edges(
                                         graph, pos, ax=ax, 
-                                        edge_color=edge_colors_list, 
-                                        width=0.8,  # Thicker lines
-                                        alpha=0.6,  # Much more visible!
+                                        edge_color=edge_colors, 
+                                        width=widths, 
+                                        alpha=0.6,  # High visibility
+                                        connectionstyle="arc3,rad=0.1", # <--- THE CURVE MAGIC
                                         arrows=True,
                                         arrowstyle='-|>', 
-                                        arrowsize=5
+                                        arrowsize=6
                                     )
                                     
-                                    # NODES: Sharp "Halo" Style
+                                    # 4. NODES (NEON HALOS)
                                     base_sizes = [graph.nodes[n].get('size', 5) for n in graph.nodes()]
                                     node_colors = [graph.nodes[n].get('color', '#FFF') for n in graph.nodes()]
                                     
-                                    # Outer Glow
-                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*6 for s in base_sizes], node_color=node_colors, alpha=0.15, linewidths=0)
-                                    # Inner Core
-                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*1.5 for s in base_sizes], node_color=node_colors, alpha=0.9, linewidths=0.5, edgecolors='white')
+                                    # Outer Glow (Atmosphere)
+                                    nx.draw_networkx_nodes(
+                                        graph, pos, ax=ax, 
+                                        node_size=[s*8 for s in base_sizes], 
+                                        node_color=node_colors, 
+                                        alpha=0.1, 
+                                        linewidths=0
+                                    )
+                                    # Inner Core (Hard Data)
+                                    nx.draw_networkx_nodes(
+                                        graph, pos, ax=ax, 
+                                        node_size=[s*1.5 for s in base_sizes], 
+                                        node_color=node_colors, 
+                                        alpha=0.95, 
+                                        linewidths=0.8, 
+                                        edgecolors='white' # Sharp white rim
+                                    )
                                     
-                                    # LABELS: Only Hubs
+                                    # 5. SMART LABELING (CLEAN HUD)
+                                    # Only label the top 15% of nodes by connection count to reduce clutter
                                     degrees = dict(graph.degree())
                                     if len(graph) > 0:
+                                        # Identify Hubs
                                         top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.15)]
-                                        labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
-                                        nx.draw_networkx_labels(graph, pos, ax=ax, labels=labels, font_size=5, font_color='#E0E0E0', font_family='monospace', font_weight='bold')
+                                        
+                                        # Create label dictionary
+                                        labels = {}
+                                        for n in graph.nodes():
+                                            if n in top_nodes:
+                                                # Clean up the name (remove unique IDs like '_a1b2')
+                                                clean_name = n.split('_')[0] if '_' in n else n
+                                                labels[n] = clean_name
+                                            else:
+                                                labels[n] = ""
+                                        
+                                        # Draw Labels with a "HUD Box" background for readability
+                                        text_items = nx.draw_networkx_labels(
+                                            graph, pos, ax=ax, 
+                                            labels=labels, 
+                                            font_size=6, 
+                                            font_color='#00FF00', # Hacker Green Text
+                                            font_family='monospace', 
+                                            font_weight='bold'
+                                        )
+                                        # Add black background box to text so lines don't cross through it
+                                        for _, t in text_items.items():
+                                            t.set_bbox(dict(facecolor='black', alpha=0.6, edgecolor='none', pad=1))
                                     
+                                    # Title Style
                                     ax.set_title(f"// {title}", color='#00FF00', fontsize=8, loc='left', fontfamily='monospace')
                                     ax.axis('off')
 
