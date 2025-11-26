@@ -6042,12 +6042,14 @@ def main():
                                     G.add_edge(src, tgt, weight=r.probability)
 
                                 # --- 2. THE NEON RENDERER ---
+                                # --- 2. THE NEON RENDERER ---
                                 def plot_neon(graph, pos, ax, title):
                                     # Dark Void Background
                                     ax.set_facecolor('#050505')
                                     
-                                    # Draw Edges (Ghostly & Thin)
-                                    nx.draw_networkx_edges(graph, pos, ax=ax, edge_color='rgba(0, 255, 255, 0.1)', width=0.5, alpha=0.2, arrows=False)
+                                    # FIX: Use Hex color '#00FFFF' (Cyan) + alpha parameter
+                                    # Matplotlib crashes on 'rgba(...)' strings!
+                                    nx.draw_networkx_edges(graph, pos, ax=ax, edge_color='#00FFFF', width=0.5, alpha=0.1, arrows=False)
                                     
                                     # Draw Nodes (Glowing Dots)
                                     sizes = [G.nodes[n].get('size', 5)*2 for n in graph.nodes()]
