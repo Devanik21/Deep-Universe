@@ -2469,164 +2469,185 @@ def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
 # ========================================================
 # NEW: ADAPTIVE 2D GRN VISUALIZATION (THE "REFERENCE" STYLE)
 # ========================================================
+# ========================================================
+# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
+# ========================================================
 def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
     """
-    Adaptive 2D visualization for Universe Sandbox 2.0.
-    Maps Components (Nodes) and Rules (Edges) with Deep Space aesthetics.
+    Futuristic 'Cyber-HUD' visualization. 
+    Organizes messy hairballs into glowing, organized clusters.
     """
     G = nx.DiGraph()
     
-    # 1. Add Component Nodes (The "Body Parts")
-    for comp_id, comp in genotype.component_genes.items():
+    # --- 1. BUILD GRAPH & ASSIGN ROLES ---
+    # We assign roles to color-code nodes strictly
+    for comp in genotype.component_genes.values():
+        role = "Structure"
+        if comp.motility > 0: role = "Motor"
+        elif comp.sense_light > 0 or comp.sense_minerals > 0: role = "Sensor"
+        elif comp.compute > 0: role = "Processor"
+        elif comp.offense > 0: role = "Weapon"
+        
+        # Size based on mass, but capped to prevent huge blobs covering text
+        size = 6 + (comp.mass * 4.0) 
+        
         G.add_node(
             comp.name,
-            size=comp.mass * 10.0, # Mass determines visual size
+            size=size,
             color=comp.color,
-            node_type="Component",
-            hover_text=(
-                f"<b>{comp.name}</b><br>"
-                f"Kingdom: {comp.base_kingdom}<br>"
-                f"Mass: {comp.mass:.2f}<br>"
-                f"Role: {'Structure' if comp.structural > 0 else 'Metabolism'}"
-            )
+            role=role,
+            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}"
         )
 
-    # 2. Add Rules as Edges
-    # We map the flow from Trigger (Condition) -> Actuator (Action Target)
     for rule in genotype.rule_genes:
         if rule.is_disabled: continue
         
-        target_id = rule.action_param
-        target_name = "Unknown"
-        
-        # Resolve Target Name
-        if target_id in genotype.component_genes:
-            target_name = genotype.component_genes[target_id].name
+        # Resolve Names
+        target_name = rule.action_param
+        if target_name in genotype.component_genes:
+            target_name = genotype.component_genes[target_name].name
         else:
-            # It's an abstract target (e.g. NEIGHBORS, timer_A)
-            target_name = str(target_id)
+            # Abstract node (e.g., NEIGHBORS)
             if target_name not in G:
-                G.add_node(target_name, size=5, color="#888888", node_type="Abstract", hover_text=f"Abstract Target: {target_name}")
+                G.add_node(target_name, size=4, color="#888888", role="Abstract", hover_text="Abstract Target")
 
-        # Resolve Source (Condition)
-        # Rules can have multiple conditions; we pick the primary sensor
         source_name = "Always"
         if rule.conditions:
-            source_raw = rule.conditions[0]['source']
-            # If the source is 'self_type' check, use that component as source
-            if source_raw == 'self_type':
-                type_hash = rule.conditions[0]['target_value']
-                # Try to find component with this name/hash (Simplified)
-                source_name = "Self Concept" 
-            else:
-                source_name = source_raw
-
-        # Ensure Source Node exists (Sensors)
+            source_name = rule.conditions[0]['source']
+        
         if source_name not in G:
-            G.add_node(source_name, size=5, color="#00FFFF", node_type="Sensor", hover_text=f"Sensor: {source_name}")
+            # Sensor Input Node
+            G.add_node(source_name, size=4, color="#00FFFF", role="Input", hover_text="Sensory Input")
 
-        # Add Edge
-        edge_color = '#00FF00' if 'GROW' in rule.action_type else '#FF0000' # Green for grow, Red for other
-        G.add_edge(source_name, target_name, weight=rule.probability, type=rule.action_type, color=edge_color)
+        # Edge Color Strategy: Neon
+        edge_color = 'rgba(0, 255, 128, 0.4)' # Neon Green (Grow)
+        if 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
+            edge_color = 'rgba(255, 50, 80, 0.5)' # Neon Red (Danger)
+        elif 'EMIT' in rule.action_type:
+            edge_color = 'rgba(0, 200, 255, 0.5)' # Cyan (Signal)
 
-    # --- ADAPTIVE SCALING LOGIC (From Reference) ---
-    node_count = len(G.nodes())
-    if node_count > 50:
-        pos = nx.spring_layout(G, seed=layout_seed, k=3.0/np.sqrt(node_count), iterations=200)
-    else:
-        try:
-            pos = nx.kamada_kawai_layout(G)
-        except:
-            pos = nx.spring_layout(G, seed=layout_seed, k=0.8)
+        G.add_edge(source_name, target_name, weight=rule.probability, color=edge_color)
+
+    # --- 2. LAYOUT PHYSICS (The Untangling) ---
+    # Kamada-Kawai is better for "organic" unfolding than spring
+    try:
+        pos = nx.kamada_kawai_layout(G)
+    except:
+        pos = nx.spring_layout(G, seed=layout_seed, k=0.5, iterations=100)
 
     fig = go.Figure()
 
-    # --- 1. Draw Curved Edges ---
-    base_width = 0.5 if node_count > 100 else 1.5
-    opacity = 0.4 if node_count > 100 else 0.8
+    # --- 3. GLOWING EDGES (Curved) ---
+    node_count = len(G.nodes())
+    base_width = 0.3 if node_count > 100 else 0.8 # Thinner lines for cleaner look
 
     for i, (u, v, data) in enumerate(G.edges(data=True)):
         if u not in pos or v not in pos: continue
         x0, y0 = pos[u]
         x1, y1 = pos[v]
         
-        curve_intensity = 0.05 if node_count > 50 else 0.15
-        curvature = curve_intensity if i % 2 == 0 else -curve_intensity
-        
+        # Slight curve to look organic
+        curvature = 0.1 if i % 2 == 0 else -0.1
         bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
         
-        # Color based on action type
-        act_type = data.get('type', 'IDLE')
-        e_color = 'rgba(100, 255, 100, 0.6)' if 'GROW' in act_type else 'rgba(255, 100, 100, 0.6)'
-        if 'EMIT' in act_type: e_color = 'rgba(100, 200, 255, 0.6)'
-
         fig.add_trace(go.Scatter(
             x=bx, y=by,
             mode='lines',
-            line=dict(width=base_width, color=e_color),
-            hoverinfo='text',
-            text=f"Action: {act_type}",
+            line=dict(width=base_width, color=data['color']),
+            hoverinfo='none',
             showlegend=False
         ))
 
-    # --- 2. Draw Nodes (Adaptive) ---
+    # --- 4. NODE RENDERING ---
     node_x, node_y = [], []
     node_colors = []
     node_sizes = []
     node_labels = [] 
-    hover_texts = [] 
+    node_texts = []
     
-    # Base size multiplier
-    if node_count < 20: base_size_mult = 1.0
-    elif node_count < 100: base_size_mult = 0.8
-    else: base_size_mult = 0.5
+    # "Halo" trace data (glow behind nodes)
+    halo_x, halo_y = [], []
+    halo_sizes = []
+    halo_colors = []
 
-    for node in G.nodes():
-        x, y = pos[node]
+    for node in G.nodes(data=True):
+        n_id, data = node
+        x, y = pos[n_id]
+        
         node_x.append(x)
         node_y.append(y)
-        node_colors.append(G.nodes[node]['color'])
-        hover_texts.append(G.nodes[node]['hover_text'])
+        node_colors.append(data.get('color', '#FFF'))
+        node_sizes.append(data.get('size', 5))
+        node_texts.append(data.get('hover_text', ''))
         
-        # Size logic
-        raw_size = G.nodes[node]['size']
-        final_size = max(8, raw_size * 2.0 * base_size_mult) # Ensure visible
-        node_sizes.append(final_size)
-        
-        # Smart Labeling: Hide labels for sensors if crowded
-        if node_count > 40 and G.nodes[node]['node_type'] == 'Sensor':
-            node_labels.append("")
-        else:
-            node_labels.append(node)
+        # "HUD" Style Label Processing
+        # 1. Shorten the text (e.g., "Proto-Carbon-Node_32" -> "Node_32")
+        short_label = str(n_id)
+        if "-" in short_label:
+            short_label = short_label.split("-")[-1] 
+        if len(short_label) > 10: 
+            short_label = short_label[:8] + ".."
+            
+        node_labels.append(short_label)
 
-    # Add Nodes Trace
+        # Halo setup
+        halo_x.append(x)
+        halo_y.append(y)
+        halo_sizes.append(data.get('size', 5) * 3.0) # Halo is 3x larger
+        halo_colors.append(data.get('color', '#FFF'))
+
+    # Trace A: The Glow (Halo)
+    fig.add_trace(go.Scatter(
+        x=halo_x, y=halo_y,
+        mode='markers',
+        marker=dict(
+            size=halo_sizes,
+            color=halo_colors,
+            opacity=0.2, # Transparent glow
+            line=dict(width=0)
+        ),
+        hoverinfo='none',
+        showlegend=False
+    ))
+
+    # Trace B: The Core Nodes & Labels
     fig.add_trace(go.Scatter(
         x=node_x, y=node_y,
         mode='markers+text', 
         text=node_labels,
-        textposition="bottom center",
-        textfont=dict(family="Arial", size=10 if node_count < 50 else 8, color="#EEE"),
-        hovertext=hover_texts,
+        textposition="top center",
+        # FUTURISTIC FONT SETTINGS
+        textfont=dict(
+            family="Courier New", # Monospace looks techy
+            size=9, 
+            color='rgba(200, 220, 255, 0.7)' # Slight ghostly blue-white
+        ),
+        hovertext=node_texts,
         hoverinfo='text',
         marker=dict(
             color=node_colors,
             size=node_sizes,
-            line=dict(width=1 if node_count > 100 else 2, color='white'),
+            line=dict(width=1, color='white'), # Sharp white rim
             opacity=1.0
         ),
-        name='Genetic Components'
+        name='Components'
     ))
 
-    # Layout Styling (Deep Space)
+    # Layout Styling (Deep Space HUD)
     fig.update_layout(
-        title=dict(text=f"<b>Neural Topography</b> | Nodes: {node_count}", x=0.5, font=dict(size=14, color='#AAA')),
+        title=dict(
+            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#666'>// NODES: {node_count} //</span>", 
+            x=0.05, 
+            y=0.95,
+            font=dict(size=16, color='#00ccff', family="Courier New")
+        ),
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=10, l=10, r=10, t=40),
+        margin=dict(b=20, l=20, r=20, t=50),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         height=650,
-        plot_bgcolor='rgba(5,5,8,1)', # Deep space black
+        plot_bgcolor='#050505', # Almost black
         paper_bgcolor='rgba(0,0,0,0)'
     )
     
