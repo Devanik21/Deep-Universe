@@ -6012,6 +6012,7 @@ def main():
                         # PART 2: DEEP NETWORK ANALYSIS (HIGH-FIDELITY & ROBUST)
                         # ==========================================
                         # ==========================================
+                        # ==========================================
                         # PART 2: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
                         # ==========================================
                         if i in st.session_state.loaded_specimen_scans:
@@ -6021,9 +6022,9 @@ def main():
                                     st.session_state.loaded_specimen_networks.add(i)
                                     st.rerun()
                             else:
-                                st.markdown("#### 🕸️ GRN Encyclopedia (Neon-Grid)")
+                                st.markdown("#### 🕸️ GRN Encyclopedia (Neural Pathways)")
                                 
-                                # --- 1. Construct Graph ---
+                                # --- 1. Construct Graph (Now with Edge Types) ---
                                 G = nx.DiGraph()
                                 for c in specimen.component_genes.values():
                                     # Assign Neon Colors based on function
@@ -6039,77 +6040,58 @@ def main():
                                     if tgt not in G: G.add_node(tgt, size=3, color='#555555')
                                     src = r.conditions[0]['source'] if r.conditions else "Input"
                                     if src not in G: G.add_node(src, size=3, color='#FFFFFF')
-                                    G.add_edge(src, tgt, weight=r.probability)
+                                    
+                                    # CLASSIFY THE CONNECTION TYPE
+                                    edge_color = '#4444FF' # Default (Deep Blue)
+                                    if 'GROW' in r.action_type or 'EMIT' in r.action_type:
+                                        edge_color = '#00FFCC' # Bright Teal (Creation/Signal)
+                                    elif 'DIE' in r.action_type or 'ATTACK' in r.action_type or 'POISON' in r.action_type:
+                                        edge_color = '#FF0055' # Hot Pink/Red (Destruction)
+                                        
+                                    G.add_edge(src, tgt, weight=r.probability, color=edge_color)
 
-                                # --- 2. THE NEON RENDERER ---
-                                # --- 2. THE NEON RENDERER ---
-                                # --- 2. THE NEON RENDERER (UPGRADED: PRECISION MODE) ---
+                                # --- 2. THE NEON RENDERER (Fixed Visibility) ---
                                 def plot_neon(graph, pos, ax, title):
-                                    # 1. Background: Deep Space Void (Very dark grey/black)
+                                    # Background: Deep Void
                                     ax.set_facecolor('#050505')
                                     
-                                    # 2. Edges: "Fiber Optic" Style
-                                    # Thinner width (0.3), specific Cyan color, low alpha for "ghostly" connections
+                                    # EDGES: Separate them by color to draw them distinctly
+                                    edges = graph.edges(data=True)
+                                    edge_colors_list = [d.get('color', '#4444FF') for u, v, d in edges]
+                                    
+                                    # Draw edges with HIGH opacity (0.6) and distinct width
                                     nx.draw_networkx_edges(
                                         graph, pos, ax=ax, 
-                                        edge_color='#00FFFF', 
-                                        width=0.3, 
-                                        alpha=0.15, 
-                                        arrows=False
+                                        edge_color=edge_colors_list, 
+                                        width=0.8,  # Thicker lines
+                                        alpha=0.6,  # Much more visible!
+                                        arrows=True,
+                                        arrowstyle='-|>', 
+                                        arrowsize=5
                                     )
                                     
-                                    # Get data lists
-                                    base_sizes = [G.nodes[n].get('size', 5) for n in graph.nodes()]
-                                    colors = [G.nodes[n].get('color', '#FFF') for n in graph.nodes()]
+                                    # NODES: Sharp "Halo" Style
+                                    base_sizes = [graph.nodes[n].get('size', 5) for n in graph.nodes()]
+                                    node_colors = [graph.nodes[n].get('color', '#FFF') for n in graph.nodes()]
                                     
-                                    # 3. Nodes Layer A: The "Halo" (Atmosphere)
-                                    # Large, very transparent (alpha=0.1), creates the glow effect
-                                    nx.draw_networkx_nodes(
-                                        graph, pos, ax=ax, 
-                                        node_size=[s * 8.0 for s in base_sizes], 
-                                        node_color=colors, 
-                                        alpha=0.1, 
-                                        linewidths=0
-                                    )
+                                    # Outer Glow
+                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*6 for s in base_sizes], node_color=node_colors, alpha=0.15, linewidths=0)
+                                    # Inner Core
+                                    nx.draw_networkx_nodes(graph, pos, ax=ax, node_size=[s*1.5 for s in base_sizes], node_color=node_colors, alpha=0.9, linewidths=0.5, edgecolors='white')
                                     
-                                    # 4. Nodes Layer B: The "Core" (Hard Data)
-                                    # Small, high opacity (alpha=0.9), with a thin white rim
-                                    nx.draw_networkx_nodes(
-                                        graph, pos, ax=ax, 
-                                        node_size=[s * 1.5 for s in base_sizes], 
-                                        node_color=colors, 
-                                        alpha=0.95, 
-                                        linewidths=0.5,
-                                        edgecolors='#FFFFFF' # The white rim makes them look crisp
-                                    )
-                                    
-                                    # 5. Smart Labeling: Only label the "Hubs" (Top 10%)
+                                    # LABELS: Only Hubs
                                     degrees = dict(graph.degree())
                                     if len(graph) > 0:
-                                        # Sort nodes by degree (connections)
-                                        top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.10)]
-                                        # Only creating labels for the top nodes
+                                        top_nodes = sorted(degrees, key=degrees.get, reverse=True)[:int(len(graph)*0.15)]
                                         labels = {n: n.split('-')[-1] if n in top_nodes else "" for n in graph.nodes()}
-                                        
-                                        # Draw labels with high contrast
-                                        nx.draw_networkx_labels(
-                                            graph, pos, ax=ax, 
-                                            labels=labels, 
-                                            font_size=4, 
-                                            font_color='#FFFFFF', 
-                                            font_family='monospace',
-                                            font_weight='bold'
-                                        )
+                                        nx.draw_networkx_labels(graph, pos, ax=ax, labels=labels, font_size=5, font_color='#E0E0E0', font_family='monospace', font_weight='bold')
                                     
-                                    # Title Style: Tech Green
-                                    ax.set_title(f"// {title}", color='#00FF00', fontsize=7, loc='left', fontfamily='monospace')
+                                    ax.set_title(f"// {title}", color='#00FF00', fontsize=8, loc='left', fontfamily='monospace')
                                     ax.axis('off')
 
                                 # --- 3. LAYOUTS ---
                                 import math
-                                k_val = 0.5  # Spacing factor
-                                
-                                # Safe layouts (No crashes)
+                                k_val = 0.5
                                 layouts = [
                                     ("1. Atomic (Spring)", nx.spring_layout(G, seed=42, k=k_val)),
                                     ("2. Energy (Kamada)", nx.kamada_kawai_layout(G)),
@@ -6124,7 +6106,7 @@ def main():
                                     ("11. Layers (Multipartite)", nx.spring_layout(G, iterations=10)),
                                     ("12. Deep (Iterative)", nx.spring_layout(G, iterations=200)),
                                     ("13. Grid (Spectral)", nx.spectral_layout(G, weight='weight')),
-                                    ("14. Flow (Spring)", nx.spring_layout(G)), # <--- FIXED: Removed arrows=True
+                                    ("14. Flow (Spring)", nx.spring_layout(G)),
                                     ("15. Star (Center)", nx.spring_layout(G, center=(0,0))),
                                     ("16. Alt Reality (Seed 99)", nx.spring_layout(G, seed=99))
                                 ]
