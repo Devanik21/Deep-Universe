@@ -2676,224 +2676,134 @@ def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
 # UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
 # ========================================================
 # ========================================================
-# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY (Detailed)
+# ========================================================
+# UPGRADED: HYBRID 2D GRN (Clarity of V1 + Style of V2)
 # ========================================================
 def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
     """
-    Futuristic 'Cyber-HUD' visualization with added network centrality detail.
-    - Node size reflects both mass and influence (centrality).
-    - Node ring color indicates dominant outgoing logic (Green=Grow, Pink=Decay).
+    The 'Gold Standard' visualization.
+    Combines the high readability of the old version with the dark aesthetic of the new one.
     """
     G = nx.DiGraph()
     
-    # --- 1. BUILD GRAPH & ASSIGN ROLES/LOGIC TALLY ---
-    logic_tally = {} # To store counts of rule types per node
-    
+    # --- 1. BUILD GRAPH ---
+    # We use larger base sizes to match your 'Old Version' clarity
     for comp in genotype.component_genes.values():
         role = "Structure"
         if comp.motility > 0: role = "Motor"
-        elif comp.sense_light > 0 or comp.sense_minerals > 0: role = "Sensor"
+        elif comp.sense_light > 0: role = "Sensor"
         elif comp.compute > 0: role = "Processor"
-        elif comp.offense > 0: role = "Weapon"
         
-        # Base size based on mass, capped to prevent huge blobs
-        base_size = 6 + (comp.mass * 4.0) 
-        
+        # Base size matches your Old Version (Large, readable bubbles)
         G.add_node(
             comp.name,
-            size=base_size,
+            size=25 + (comp.mass * 5.0), # Much bigger nodes!
             color=comp.color,
             role=role,
-            hover_text=f"<b>{comp.name}</b><br>Role: {role}<br>Mass: {comp.mass:.2f}",
+            label=comp.name # Full name for readability
         )
-        logic_tally[comp.name] = {'grow': 0, 'decay': 0, 'other': 0}
 
-    # Add Rules (Edges) & Abstract Nodes
+    # Add Edges
     for rule in genotype.rule_genes:
         if rule.is_disabled: continue
         
-        # 1. Resolve Target
+        # Resolve Names
         target_name = rule.action_param
         if target_name in genotype.component_genes:
             target_name = genotype.component_genes[target_name].name
         else:
             if target_name not in G:
-                G.add_node(target_name, size=4, color="#888888", role="Abstract", hover_text="Abstract Target")
+                G.add_node(target_name, size=15, color="#888888", role="Abstract", label=target_name)
 
-        # 2. Resolve Source and Tally Logic
-        source_name = "Always"
-        if rule.conditions:
-            source_name = rule.conditions[0]['source']
-        
+        source_name = rule.conditions[0]['source'] if rule.conditions else "Always"
         if source_name not in G:
-            G.add_node(source_name, size=4, color="#00FFFF", role="Input", hover_text="Sensory Input")
-        
-        # Tally logic type for source node (if it's a component)
-        if source_name in logic_tally:
-            if 'GROW' in rule.action_type:
-                logic_tally[source_name]['grow'] += 1
-            elif 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
-                logic_tally[source_name]['decay'] += 1
-            else:
-                logic_tally[source_name]['other'] += 1
+            G.add_node(source_name, size=15, color="#00FFFF", role="Input", label=source_name)
 
-        # Edge Color Strategy: Neon
-        edge_color = 'rgba(0, 255, 128, 0.4)' # Neon Green (Grow)
-        if 'DIE' in rule.action_type or 'ATTACK' in rule.action_type:
-            edge_color = 'rgba(255, 50, 80, 0.5)' # Neon Red (Danger)
-        elif 'EMIT' in rule.action_type:
-            edge_color = 'rgba(0, 200, 255, 0.5)' # Cyan (Signal)
+        # Distinct Edge Colors
+        edge_color = '#888' # Default Grey
+        if 'GROW' in rule.action_type: edge_color = '#00FF00' # Green
+        elif 'DIE' in rule.action_type: edge_color = '#FF0000' # Red
+        elif 'EMIT' in rule.action_type: edge_color = '#00FFFF' # Cyan
 
-        G.add_edge(source_name, target_name, weight=rule.probability, color=edge_color)
+        G.add_edge(source_name, target_name, color=edge_color, weight=2)
 
-    # --- 2. LAYOUT PHYSICS & CENTRALITY CALCULATION ---
-    # Calculate Centrality (Node Influence)
-    degree_centrality = nx.degree_centrality(G)
-    
-    # Generate Layout
+    # --- 2. FORCE-DIRECTED LAYOUT (The "Organized" View) ---
+    # We force 'Kamada-Kawai' or 'Spring' which pulls connected nodes together.
+    # We NEVER use 'Random' here.
     try:
-        pos = nx.kamada_kawai_layout(G)
+        pos = nx.kamada_kawai_layout(G) # This is the cleanest algorithm
     except:
-        pos = nx.spring_layout(G, seed=layout_seed, k=0.5, iterations=100)
+        pos = nx.spring_layout(G, seed=layout_seed, k=0.8, iterations=100)
 
-    fig = go.Figure()
+    # --- 3. RENDER WITH PLOTLY (Interactive) ---
+    edge_x = []
+    edge_y = []
+    edge_colors = []
 
-    # --- 3. GLOWING EDGES (Curved) ---
-    node_count = len(G.nodes())
-    base_width = 0.3 if node_count > 100 else 0.8 
+    for edge in G.edges(data=True):
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+        # We repeat the color 3 times for (x0, x1, None) to keep lists aligned
+        c = edge[2]['color']
+        edge_colors.extend([c, c, c])
 
-    for i, (u, v, data) in enumerate(G.edges(data=True)):
-        if u not in pos or v not in pos: continue
-        x0, y0 = pos[u]
-        x1, y1 = pos[v]
-        
-        curvature = 0.1 if i % 2 == 0 else -0.1
-        # NOTE: Assumes get_bezier_curve is defined elsewhere in the file
-        bx, by = get_bezier_curve(x0, y0, x1, y1, curvature=curvature)
-        
-        fig.add_trace(go.Scatter(
-            x=bx, y=by,
-            mode='lines',
-            line=dict(width=base_width, color=data['color']),
-            hoverinfo='none',
-            showlegend=False
-        ))
+    # Edges Trace
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1.5, color='#888'), # Base grey, simpler to render than individual colors in one trace
+        hoverinfo='none',
+        mode='lines'
+    )
 
-    # --- 4. NODE RENDERING (Detailed) ---
-    node_x, node_y = [], []
-    node_colors = []
+    # Nodes Trace
+    node_x = []
+    node_y = []
+    node_text = []
+    node_marker_colors = []
     node_sizes = []
-    node_labels = [] 
-    node_texts = []
-    node_line_colors = [] # New: Detailed Logic Ring Color
-
-    halo_x, halo_y = [], []
-    halo_sizes = []
-    halo_colors = []
-
-    for node in G.nodes(data=True):
-        n_id, data = node
-        x, y = pos[n_id]
-        
+    
+    for node in G.nodes():
+        x, y = pos[node]
         node_x.append(x)
         node_y.append(y)
-        
-        # Calculate new size: Base Size + Centrality Multiplier
-        centrality_score = degree_centrality.get(n_id, 0)
-        new_size = data.get('size', 5) + (centrality_score * 35) # High centrality hubs are bigger
-        node_sizes.append(new_size)
-        
-        node_colors.append(data.get('color', '#FFF'))
-        
-        # DETERMINE LOGIC RING COLOR (Detailed!)
-        line_color = 'rgba(255,255,255,0.8)' # Default: White/Neutral
-        if n_id in logic_tally:
-            tally = logic_tally[n_id]
-            if tally['grow'] > tally['decay'] and tally['grow'] > 0:
-                line_color = '#00FF00' # Neon Green: Excitatory Hub
-            elif tally['decay'] > tally['grow'] and tally['decay'] > 0:
-                line_color = '#FF00FF' # Hot Pink: Inhibitory/Attack Hub
-            # else remains neutral white/gray
+        data = G.nodes[node]
+        node_text.append(data['label'])
+        node_marker_colors.append(data['color'])
+        node_sizes.append(data['size'])
 
-        node_line_colors.append(line_color)
-
-        # Update Hover Text with Centrality Detail
-        hover_text = data.get('hover_text', '')
-        hover_text += f"<br>Influence (Centrality): {centrality_score:.3f}"
-        node_texts.append(hover_text)
-        
-        # "HUD" Style Label Processing (Same as before)
-        short_label = str(n_id)
-        if "-" in short_label:
-            short_label = short_label.split("-")[-1] 
-        if len(short_label) > 10: 
-            short_label = short_label[:8] + ".."
-            
-        node_labels.append(short_label)
-
-        # Halo setup
-        halo_x.append(x)
-        halo_y.append(y)
-        halo_sizes.append(new_size * 2.5) 
-        halo_colors.append(data.get('color', '#FFF'))
-
-    # Trace A: The Glow (Halo)
-    fig.add_trace(go.Scatter(
-        x=halo_x, y=halo_y,
-        mode='markers',
-        marker=dict(
-            size=halo_sizes,
-            color=halo_colors,
-            opacity=0.2, 
-            line=dict(width=0)
-        ),
-        hoverinfo='none',
-        showlegend=False
-    ))
-
-    # Trace B: The Core Nodes & Labels
-    fig.add_trace(go.Scatter(
+    node_trace = go.Scatter(
         x=node_x, y=node_y,
-        mode='markers+text', 
-        text=node_labels,
-        textposition="top center",
-        # FUTURISTIC FONT SETTINGS
+        mode='markers+text', # Show Marker AND Text
+        text=node_text,
+        textposition="bottom center",
         textfont=dict(
-            family="Courier New", 
-            size=9, 
-            color='rgba(200, 220, 255, 0.7)'
+            family="Arial",
+            size=14, # Readable font size!
+            color="white" # White text on dark background
         ),
-        hovertext=node_texts,
-        hoverinfo='text',
         marker=dict(
-            color=node_colors,
+            showscale=False,
+            color=node_marker_colors,
             size=node_sizes,
-            # Use dynamically determined logic ring color!
-            line=dict(width=2, color=node_line_colors), 
-            opacity=1.0
-        ),
-        name='Components'
-    ))
+            line=dict(width=2, color='white') # White outline for contrast
+        )
+    )
 
-    # Layout Styling (Deep Space HUD)
-    node_count = len([n for n in G.nodes() if G.nodes[n].get('role') != 'Input'])
+    # --- 4. LAYOUT ---
+    fig = go.Figure(data=[edge_trace, node_trace])
     fig.update_layout(
-        title=dict(
-            text=f"<b>NEURAL TOPOGRAPHY</b> <span style='font-size:12px;color:#FF00FF'>// HUBS: {node_count} // CENTRALITY MAPPED //</span>", 
-            x=0.05, 
-            y=0.95,
-            font=dict(size=16, color='#00ccff', family="Courier New")
-        ),
+        title="<b>Genetic Regulatory Network</b> (Hybrid View)",
+        titlefont=dict(size=20, color="white"),
         showlegend=False,
         hovermode='closest',
-        margin=dict(b=20, l=20, r=20, t=50),
+        margin=dict(b=20,l=5,r=5,t=40),
         xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
         yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-        height=650,
-        plot_bgcolor='#050505',
+        plot_bgcolor='#0e1117', # Streamlit Dark Blue/Grey
         paper_bgcolor='rgba(0,0,0,0)'
     )
-    
     return fig
 
 
