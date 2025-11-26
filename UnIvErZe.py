@@ -2670,13 +2670,6 @@ def get_bezier_curve(x0, y0, x1, y1, curvature=0.2, points=30):
 
 
 # ========================================================
-# NEW: ADAPTIVE 2D GRN VISUALIZATION (THE "REFERENCE" STYLE)
-# ========================================================
-# ========================================================
-# UPGRADED: 2D "CYBER-HUD" NEURAL TOPOGRAPHY
-# ========================================================
-# ========================================================
-# ========================================================
 # UPGRADED: HYBRID 2D GRN (Clarity of V1 + Style of V2)
 # ========================================================
 def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> go.Figure:
@@ -2794,8 +2787,11 @@ def visualize_grn_2d_interactive(genotype: Genotype, layout_seed: int = 42) -> g
     # --- 4. LAYOUT ---
     fig = go.Figure(data=[edge_trace, node_trace])
     fig.update_layout(
-        title="<b>Genetic Regulatory Network</b> (Hybrid View)",
-        titlefont=dict(size=20, color="white"),
+        # FIX IS HERE: Nested dictionary for title and font
+        title=dict(
+            text="<b>Genetic Regulatory Network</b> (Hybrid View)",
+            font=dict(size=20, color="white")
+        ),
         showlegend=False,
         hovermode='closest',
         margin=dict(b=20,l=5,r=5,t=40),
