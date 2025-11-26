@@ -3178,6 +3178,7 @@ def visualize_grn_sankey(genotype: Genotype) -> go.Figure:
     """
     Replaces the hairball graphs with a Logic Flow Circuit (Sankey Diagram).
     Visualizes: SENSORS -> LOGIC GATES -> ACTUATORS
+    THEME: Dark Mode / Neon Cyberpunk
     """
     labels = []
     sources = []
@@ -3196,66 +3197,82 @@ def visualize_grn_sankey(genotype: Genotype) -> go.Figure:
 
     # Process Rules
     for i, rule in enumerate(genotype.rule_genes):
-        # Create a "Logic Node" for the rule itself
-        rule_name = f"Rule {i}<br>({rule.action_type})"
-        rule_color = "#FFB347" if not rule.is_disabled else "#555555"
+        if rule.is_disabled: continue
+
+        # Create a "Logic Node" for the rule itself (The Processor)
+        # Color: Bright Purple for Logic
+        rule_name = f"RULE {i}:<br>{rule.action_type}"
+        rule_color = "#BD00FF" 
         rule_idx = get_node_index(rule_name, rule_color)
 
         # 1. Map Conditions (Inputs/Sensors) -> Rule
         if not rule.conditions:
             # Always active
-            src_idx = get_node_index("ALWAYS TRUE", "#DDDDDD")
+            src_idx = get_node_index("ALWAYS TRUE", "#555555")
             sources.append(src_idx)
             targets.append(rule_idx)
             values.append(1.0)
         else:
             for cond in rule.conditions:
                 # Sensor Node
-                sensor_name = f"SENSE:<br>{cond['source']}"
-                sensor_color = "#88CCEE" # Light Blue for Sensors
+                # Color: Cyan for Sensors
+                sensor_name = f"INPUT:<br>{cond['source']}"
+                sensor_color = "#00FFFF" 
                 src_idx = get_node_index(sensor_name, sensor_color)
                 
                 sources.append(src_idx)
                 targets.append(rule_idx)
-                values.append(rule.probability * 2) # Thickness based on probability
+                values.append(rule.probability * 2)
 
         # 2. Map Rule -> Actions (Outputs/Actuators)
-        # Action Node
         action_target = rule.action_param
-        # Try to get component color if the target is a component
+        
+        # Get component color if the target is a component
         comp = genotype.component_genes.get(action_target)
-        action_color = comp.color if comp else "#FF6B6B" # Red for generic actions
+        if comp:
+            # Use the component's actual neon color
+            action_color = comp.color 
+            target_display_name = f"COMP:<br>{comp.name}"
+        else:
+            # Generic Action (e.g., TIMER) -> Neon Green
+            action_color = "#00FF00" 
+            target_display_name = f"ACT:<br>{action_target}"
         
-        action_name = f"ACT:<br>{action_target}"
-        
-        tgt_idx = get_node_index(action_name, action_color)
+        tgt_idx = get_node_index(target_display_name, action_color)
         
         sources.append(rule_idx)
         targets.append(tgt_idx)
         values.append(rule.probability * 2)
 
+    # --- RENDER IN DARK MODE ---
     fig = go.Figure(data=[go.Sankey(
         node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="black", width=0.5),
+            pad=20,
+            thickness=15,
+            line=dict(color="white", width=0.5), # White rim around nodes
             label=labels,
-            color=node_colors
+            color=node_colors,
+            # Text styling
+            hoverinfo='all'
         ),
         link=dict(
             source=sources,
             target=targets,
             value=values,
-            color="rgba(150, 150, 150, 0.2)" # Semi-transparent links
+            color="rgba(100, 100, 100, 0.3)" # Subtle grey transparency for links
         )
     )])
 
     fig.update_layout(
-        title_text="<b>Genetic Logic Circuit (Sensors → Logic → Actions)</b>",
-        font_size=10,
+        title=dict(
+            text="<b>// LOGIC CIRCUIT (SENSORS → ACTUATORS)</b>", 
+            font=dict(size=14, color="#00FFFF", family="Courier New")
+        ),
+        font=dict(size=10, color="white", family="monospace"), # White text
         height=500,
-        plot_bgcolor='rgba(0,0,0,0)',
-        paper_bgcolor='rgba(0,0,0,0)'
+        plot_bgcolor='#050505', # Deep black background
+        paper_bgcolor='#050505',
+        margin=dict(l=10, r=10, t=40, b=10)
     )
     return fig
 
