@@ -6009,10 +6009,6 @@ def main():
                         st.markdown("---")
 
                         # ==========================================
-                        # PART 2: DEEP NETWORK ANALYSIS (HIGH-FIDELITY & ROBUST)
-                        # ==========================================
-                        # ==========================================
-                        # ==========================================
                         # ==========================================
                         # PART 2: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
                         # ==========================================
@@ -6051,7 +6047,7 @@ def main():
                                         
                                     G.add_edge(src, tgt, weight=r.probability, color=edge_color)
 
-                                # --- 2. THE NEON RENDERER (V3.1: MINIMALIST HUD) ---
+                                # --- 2. THE NEON RENDERER (V3.1: DEEP NEURAL STYLE) ---
                                 def plot_neon(graph, pos, ax, title):
                                     # 1. Background: Deep Void
                                     ax.set_facecolor('#050505')
@@ -6072,7 +6068,7 @@ def main():
                                         alpha=0.6,  # Visibility
                                         connectionstyle="arc3,rad=0.15", # CURVATURE
                                         arrows=True,
-                                        arrowstyle='-|>', # Sharp Arrows
+                                        arrowstyle='-|>', # Sharp Arrows like Deep Learning Diagrams
                                         arrowsize=8
                                     )
                                     
@@ -6080,7 +6076,7 @@ def main():
                                     base_sizes = [graph.nodes[n].get('size', 5) for n in graph.nodes()]
                                     node_colors = [graph.nodes[n].get('color', '#FFF') for n in graph.nodes()]
                                     
-                                    # Outer Glow (Halo)
+                                    # Layer A: Outer Glow (Halo)
                                     nx.draw_networkx_nodes(
                                         graph, pos, ax=ax, 
                                         node_size=[s*8 for s in base_sizes], 
@@ -6088,7 +6084,7 @@ def main():
                                         alpha=0.15, 
                                         linewidths=0
                                     )
-                                    # Inner Core (Solid)
+                                    # Layer B: Inner Core (Solid)
                                     nx.draw_networkx_nodes(
                                         graph, pos, ax=ax, 
                                         node_size=[s*1.2 for s in base_sizes], 
@@ -6128,7 +6124,7 @@ def main():
                                             font_family='monospace', 
                                             font_weight='bold'
                                         )
-                                        # Text Background Box
+                                        # Text Background Box (HUD Style)
                                         for _, t in text_items.items():
                                             t.set_bbox(dict(facecolor='black', alpha=0.6, edgecolor='none', pad=0.5))
                                     
