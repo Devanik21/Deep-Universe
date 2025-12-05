@@ -6210,7 +6210,7 @@ def main():
                         # ==========================================
                         # PART 3: DEEP NETWORK ANALYSIS (NEON ENCYCLOPEDIA)
                         # ==========================================
-                        
+                        if i in st.session_state.loaded_specimen_scans:
                             if i not in st.session_state.loaded_specimen_networks:
                                 st.info("Deep Network Analysis contains 16 computationally intensive graph layouts.")
                                 if st.button(f"🕸️ Load GRN Encyclopedia (High-Fidelity)", key=f"btn_load_net_{i}"):
