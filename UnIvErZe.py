@@ -6356,7 +6356,7 @@ def main():
                                         st.pyplot(fig)
                                         plt.close(fig)
 
-                                if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_{i}"):
+                                if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_grid_{i}"):
                                     st.session_state.loaded_specimen_networks.remove(i)
                                     st.rerun()
 
@@ -6369,7 +6369,7 @@ def main():
                         if i in st.session_state.loaded_specimen_scans:
                             if i not in st.session_state.loaded_specimen_networks:
                                 st.info("Deep Network Analysis contains 16 computationally intensive graph layouts.")
-                                if st.button(f"🕸️ Load GRN Encyclopedia (High-Fidelity)", key=f"btn_load_net_{i}"):
+                                if st.button(f"🕸️ Load GRN Encyclopedia (High-Fidelity)", key=f"btn_load_net_grid_{i}"):
                                     st.session_state.loaded_specimen_networks.add(i)
                                     st.rerun()
                             else:
@@ -6517,7 +6517,7 @@ def main():
                                         st.pyplot(fig)
                                         plt.close(fig)
 
-                                if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_{i}"):
+                                if st.button("❌ Close Encyclopedia", key=f"btn_hide_net_grid_{i}"):
                                     st.session_state.loaded_specimen_networks.remove(i)
                                     st.rerun()
 
