@@ -1137,7 +1137,7 @@ class Phenotype:
                 
                 if targets and cell.component.scavenge > 0:
                     target_loc = random.choice(targets)
-                    victim_pheno, victim_cell = self.get_target_internal(target_loc.x, target_loc.y)
+                    victim_pheno, victim_cell = self.get_target_at(target_loc.x, target_loc.y)
                     
                     if victim_cell:
                         # Steal based on scavenge skill
@@ -1153,7 +1153,7 @@ class Phenotype:
                 if potency > 0:
                     neighbors = self.grid.get_neighbors(cell.x, cell.y)
                     for n in neighbors:
-                        victim_pheno, victim_cell = self.get_target_internal(n.x, n.y)
+                        victim_pheno, victim_cell = self.get_target_at(n.x, n.y)
                         if victim_cell:
                             # Poison ignores armor mostly
                             damage = potency * 0.5
